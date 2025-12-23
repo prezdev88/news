@@ -1,0 +1,10 @@
+services:
+  news-backend:
+    ports:
+      - "8080:8080"
+  news-frontend:
+    ports:
+      - "4200:80"
+  news-db:
+    ports:
+      - "5432:5432"

@@ -1,0 +1,2 @@
+ALTER TABLE news_entry DROP COLUMN IF EXISTS event;
+ALTER TABLE news_entry DROP COLUMN IF EXISTS context;

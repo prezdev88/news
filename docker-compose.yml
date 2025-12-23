@@ -1,0 +1,51 @@
+name: news
+services:
+  news-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: news
+      POSTGRES_USER: news
+      POSTGRES_PASSWORD: news
+      TZ: America/Santiago
+    expose:
+      - "5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "news"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxy-net
+
+  news-backend:
+    build: ./backend
+    depends_on:
+      news-db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://news-db:5432/news
+      SPRING_DATASOURCE_USERNAME: news
+      SPRING_DATASOURCE_PASSWORD: news
+      TZ: America/Santiago
+    expose:
+      - "8080"
+    networks:
+      - proxy-net
+
+  news-frontend:
+    build: ./front
+    depends_on:
+      - news-backend
+    expose:
+      - "80"
+    networks:
+      - proxy-net
+
+volumes:
+  pg_data:
+
+networks:
+  proxy-net:
+    external: true
