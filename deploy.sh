@@ -7,7 +7,7 @@ main() {
   cd "$script_dir"
 
   echo "Building images (news-backend/news-frontend)..."
-  docker compose -f docker-compose.yml build --no-cache news-backend news-frontend
+  COMPOSE_BAKE=0 DOCKER_BUILDKIT=0 docker compose -f docker-compose.yml build --no-cache news-backend news-frontend
 
   echo "Starting stack..."
   docker compose -f docker-compose.yml up -d
