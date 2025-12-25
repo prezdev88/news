@@ -6,8 +6,8 @@ main() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   cd "$script_dir"
 
-  echo "Building images (backend/front)..."
-  docker compose -f docker-compose.yml build --no-cache backend front
+  echo "Building images (news-backend/news-frontend)..."
+  docker compose -f docker-compose.yml build --no-cache news-backend news-frontend
 
   echo "Starting stack..."
   docker compose -f docker-compose.yml up -d
