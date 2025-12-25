@@ -14,8 +14,8 @@
       <div class="muted">Titulares con hashtags y fuentes</div>
     </div>
     <nav>
-      <a href="/" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
-      <a href="/filtros" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
+      <a href="./" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
+      <a href="filtros" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
     </nav>
   </header>
 
@@ -23,7 +23,7 @@
     <section>
       <h3>Nueva entrada</h3>
       <div class="notice" th:if="${created}">Entrada creada.</div>
-      <form class="creator" th:action="@{/entries}" th:object="${entryForm}" method="post">
+      <form class="creator" th:action="@{entries}" th:object="${entryForm}" method="post">
         <div class="sources-wrapper" data-sources>
           <div>
             <strong>Fuentes</strong>

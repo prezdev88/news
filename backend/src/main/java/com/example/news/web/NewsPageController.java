@@ -56,10 +56,10 @@ public class NewsPageController {
         }
         newsEntryService.create(toRequest(form));
         redirectAttributes.addAttribute("created", "1");
-        return "redirect:/";
+        return "redirect:../";
     }
 
-    @GetMapping("/filtros")
+    @GetMapping({"/filtros", "/filtros/"})
     public String filters(@ModelAttribute("filterForm") FilterForm form, Model model) {
         List<NewsEntryResponse> entries = newsEntryService.list(
                 form.getFrom(),
