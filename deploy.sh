@@ -6,18 +6,17 @@ main() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   cd "$script_dir"
 
-  echo "Building images (news-backend/news-frontend)..."
-  COMPOSE_BAKE=0 DOCKER_BUILDKIT=0 docker compose -f docker-compose.yml build --no-cache news-backend news-frontend
+  echo "Building images (backend)..."
+  COMPOSE_BAKE=0 DOCKER_BUILDKIT=0 docker compose build --no-cache backend
 
   echo "Starting stack..."
-  docker compose -f docker-compose.yml up -d
+  docker compose up -d
 
   echo "Stack is up (no host ports published)."
   echo "Containers expose:"
-  echo " - Backend: 8080 (internal)"
-  echo " - Front:   80 (internal)"
+  echo " - App:     8080 (internal)"
   echo " - Postgres:5432 (internal, user/pass/db: news/news/news)"
-  echo "Use your Nginx reverse proxy to route traffic to front/back if needed."
+  echo "Use your Nginx reverse proxy to route traffic to the backend if needed."
 }
 
 main "$@"

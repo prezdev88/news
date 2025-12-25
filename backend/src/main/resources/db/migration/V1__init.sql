@@ -8,8 +8,6 @@ CREATE TABLE news_entry (
     id UUID PRIMARY KEY,
     date DATE NOT NULL,
     headline VARCHAR(500) NOT NULL,
-    event TEXT NOT NULL,
-    context TEXT,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 );

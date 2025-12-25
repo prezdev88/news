@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>News Timeline - Filtros</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main>
+  <header class="page-header">
+    <div>
+      <h1>News Timeline</h1>
+      <div class="muted">Titulares con hashtags y fuentes</div>
+    </div>
+    <nav>
+      <a href="/" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
+      <a href="/filtros" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
+    </nav>
+  </header>
+
+  <div class="panel" style="margin-bottom: 20px;">
+    <h3>Filtros</h3>
+    <form class="filters" th:action="@{/filtros}" th:object="${filterForm}" method="get">
+      <label>
+        <span>Desde</span>
+        <input type="date" th:field="*{from}">
+      </label>
+      <label>
+        <span>Hasta</span>
+        <input type="date" th:field="*{to}">
+      </label>
+      <label>
+        <span>Texto (headline)</span>
+        <input type="text" placeholder="busca en headline" th:field="*{q}">
+      </label>
+      <label>
+        <span>Hashtags (coma)</span>
+        <input type="text" placeholder="kast,boric" th:field="*{hashtags}">
+      </label>
+      <div class="submit-row">
+        <button type="submit">Aplicar filtros</button>
+      </div>
+    </form>
+  </div>
+
+  <section class="panel">
+    <div class="panel-title">
+      <h3>Resultados</h3>
+      <div class="muted small" th:if="${#lists.isEmpty(entries)}">Sin resultados.</div>
+    </div>
+    <div class="grid" style="margin-top: 12px;">
+      <div class="entry-card" th:each="entry : ${entries}">
+        <div class="entry-date" th:text="${entry.date}"></div>
+        <div class="entry-headline" th:text="${entry.headline}"></div>
+        <div style="margin: 8px 0;">
+          <span class="tag" th:each="tag : ${entry.hashtags}" th:text="${'#' + tag}"></span>
+        </div>
+        <div class="sources" th:if="${entry.sources != null and !#lists.isEmpty(entry.sources)}">
+          Fuentes:
+          <span th:each="s, iter : ${entry.sources}">
+            [<span th:text="${iter.index + 1}"></span>]
+            <a th:href="${s.url}" th:text="${s.name}" target="_blank" rel="noreferrer"></a>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

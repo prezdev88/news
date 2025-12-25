@@ -18,10 +18,10 @@ La app usa `application.properties` (sin YAML) con Postgres por defecto:
 docker compose up -d  # levanta postgres y pgadmin
 ```
 
-### Levantar stack completo (backend + front + postgres)
+### Levantar stack completo (backend + postgres)
 ```bash
 docker compose up -d --build
-# front en http://localhost:4200 , backend en http://localhost:8080
+# app en http://localhost:8080 (Thymeleaf)
 ```
 
 ### Ejecutar la aplicación

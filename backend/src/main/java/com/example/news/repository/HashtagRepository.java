@@ -3,6 +3,7 @@ package com.example.news.repository;
 import com.example.news.domain.Hashtag;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,5 +21,5 @@ public interface HashtagRepository extends JpaRepository<Hashtag, UUID> {
     List<Hashtag> findAllByOrderByTagAsc();
 
     @Query("select count(distinct e) from NewsEntry e join e.hashtags h where h.tag = :tag")
-    long countEntriesWithTag(String tag);
+    long countEntriesWithTag(@Param("tag") String tag);
 }

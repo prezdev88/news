@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>News Timeline</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main>
+  <header class="page-header">
+    <div>
+      <h1>News Timeline</h1>
+      <div class="muted">Titulares con hashtags y fuentes</div>
+    </div>
+    <nav>
+      <a href="/" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
+      <a href="/filtros" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
+    </nav>
+  </header>
+
+  <div class="panel grid" style="gap: 20px;">
+    <section>
+      <h3>Nueva entrada</h3>
+      <div class="notice" th:if="${created}">Entrada creada.</div>
+      <form class="creator" th:action="@{/entries}" th:object="${entryForm}" method="post">
+        <div class="sources-wrapper" data-sources>
+          <div>
+            <strong>Fuentes</strong>
+            <div class="muted small">Puedes agregar todas las que necesites.</div>
+            <button type="button" class="secondary" data-add-source>Añadir fuente</button>
+          </div>
+          <div class="source-row" th:each="src, iter : *{sources}" data-source-row>
+            <input type="url" placeholder="URL (https://...)" th:field="*{sources[__${iter.index}__].url}">
+            <div class="source-actions">
+              <button type="button" class="ghost" data-remove-source th:if="${iter.size} > 1">Eliminar</button>
+            </div>
+          </div>
+        </div>
+
+        <label>
+          <span>Headline *</span>
+          <input type="text" th:field="*{headline}" required>
+        </label>
+
+        <label>
+          <span>Fecha *</span>
+          <input type="date" th:field="*{date}" required>
+        </label>
+
+        <label>
+          <span>Hashtags (coma)</span>
+          <input type="text" placeholder="kast,venezuela" th:field="*{hashtags}">
+        </label>
+
+        <div class="submit-row">
+          <button type="submit">Crear</button>
+        </div>
+      </form>
+    </section>
+
+    <section>
+      <h3>Hashtags recientes</h3>
+      <div class="tag-list" th:if="${hashtags}">
+        <span class="badge" th:each="tag : ${hashtags}" th:text="${'#' + tag}"></span>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 24px;">
+    <div class="panel-title">
+      <h3>Entradas</h3>
+      <div class="muted small" th:if="${#lists.isEmpty(entries)}">Sin registros todavía.</div>
+    </div>
+
+    <div class="grid" style="margin-top: 12px;">
+      <div class="entry-card" th:each="entry : ${entries}">
+        <div class="entry-date" th:text="${entry.date}"></div>
+        <div class="entry-headline" th:text="${entry.headline}"></div>
+        <div style="margin: 8px 0;">
+          <span class="tag" th:each="tag : ${entry.hashtags}" th:text="${'#' + tag}"></span>
+        </div>
+        <div class="sources" th:if="${entry.sources != null and !#lists.isEmpty(entry.sources)}">
+          Fuentes:
+          <span th:each="s, iter : ${entry.sources}">
+            [<span th:text="${iter.index + 1}"></span>]
+            <a th:href="${s.url}" th:text="${s.name}" target="_blank" rel="noreferrer"></a>
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<template id="source-template">
+  <div class="source-row" data-source-row>
+    <input type="url" placeholder="URL (https://...)" name="sources[__index__].url">
+    <div class="source-actions">
+      <button type="button" class="ghost" data-remove-source>Eliminar</button>
+    </div>
+  </div>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>
