@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Controller
 public class NewsPageController {
@@ -47,7 +48,8 @@ public class NewsPageController {
     public String create(@Valid @ModelAttribute("entryForm") NewsEntryForm form,
                          BindingResult bindingResult,
                          Model model,
-                         RedirectAttributes redirectAttributes) {
+                         RedirectAttributes redirectAttributes,
+                         HttpServletRequest request) {
         if (bindingResult.hasErrors()) {
             ensureSourceRow(form);
             populateHome(model, form);
@@ -56,7 +58,7 @@ public class NewsPageController {
         }
         newsEntryService.create(toRequest(form));
         redirectAttributes.addAttribute("created", "1");
-        return "redirect:../";
+        return "redirect:" + resolveBasePath(request);
     }
 
     @GetMapping({"/filtros", "/filtros/"})
@@ -126,5 +128,16 @@ public class NewsPageController {
         } catch (IllegalArgumentException ignored) {
         }
         return url;
+    }
+
+    private String resolveBasePath(HttpServletRequest request) {
+        String prefix = request.getHeader("X-Forwarded-Prefix");
+        if (prefix == null || prefix.isBlank()) {
+            return "/";
+        }
+        if (!prefix.startsWith("/")) {
+            prefix = "/" + prefix;
+        }
+        return prefix.endsWith("/") ? prefix : prefix + "/";
     }
 }
