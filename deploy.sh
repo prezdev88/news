@@ -7,7 +7,7 @@ main() {
   cd "$script_dir"
 
   echo "Building images (backend)..."
-  COMPOSE_BAKE=0 DOCKER_BUILDKIT=0 docker compose build --no-cache backend
+  COMPOSE_BAKE=0 DOCKER_BUILDKIT=0 docker compose build backend
 
   echo "Starting stack..."
   docker compose up -d
