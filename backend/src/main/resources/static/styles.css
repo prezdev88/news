@@ -140,6 +140,18 @@ button.ghost {
 .entry-headline { font-size: 17px; margin: 0 0 6px; color: #e5e7eb; }
 .entry-date { color: var(--muted); font-size: 13px; }
 .sources { color: var(--muted); font-size: 13px; }
+.sources a {
+  color: #b5c5d6;
+  text-decoration: none;
+}
+
+.sources a:visited {
+  color: #b5c5d6;
+}
+
+.sources a:hover {
+  text-decoration: underline;
+}
 
 .badge {
   display: inline-block;
