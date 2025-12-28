@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.data.domain.Page;
 
 import java.net.URI;
 import java.time.LocalDate;
@@ -38,14 +40,20 @@ public class NewsPageController {
 
     @GetMapping("/")
     public String home(@RequestParam(value = "created", required = false) String created,
+                       @RequestParam(value = "page", defaultValue = "0") int page,
                        HttpServletRequest request,
                        Model model) {
+        int safePage = Math.max(0, page);
         NewsEntryForm form = new NewsEntryForm();
         ensureSourceRow(form);
-        populateHome(model, form);
+        Page<NewsEntryResponse> pageResult = newsEntryService.listPage(null, null, null, Set.of(), safePage, 5);
+        populateHome(model, form, pageResult.getContent());
         model.addAttribute("created", created != null);
         model.addAttribute("activePage", "home");
         model.addAttribute("basePath", resolveBasePath(request));
+        model.addAttribute("page", safePage);
+        model.addAttribute("totalPages", pageResult.getTotalPages());
+        model.addAttribute("pageBase", resolveBasePath(request) + "?");
         return "index";
     }
 
@@ -57,8 +65,11 @@ public class NewsPageController {
                          HttpServletRequest request) {
         if (bindingResult.hasErrors()) {
             ensureSourceRow(form);
-            populateHome(model, form);
+            Page<NewsEntryResponse> pageResult = newsEntryService.listPage(null, null, null, Set.of(), 0, 5);
+            populateHome(model, form, pageResult.getContent());
             model.addAttribute("activePage", "home");
+            model.addAttribute("basePath", resolveBasePath(request));
+            addPaginationModel(model, pageResult, resolveBasePath(request));
             return "index";
         }
         newsEntryService.create(toRequest(form));
@@ -69,6 +80,7 @@ public class NewsPageController {
     @GetMapping({"/filtros", "/filtros/"})
     public String filters(@ModelAttribute("filterForm") FilterForm form,
                           @RequestParam(value = "hashtag", required = false) String hashtag,
+                          @RequestParam(value = "page", defaultValue = "0") int page,
                           HttpServletRequest request,
                           Model model) {
         Set<String> tags = parseTags(form.getHashtags());
@@ -76,15 +88,21 @@ public class NewsPageController {
             tags.add(hashtag);
             form.setHashtags(hashtag);
         }
-        List<NewsEntryResponse> entries = newsEntryService.list(
+        int safePage = Math.max(0, page);
+        Page<NewsEntryResponse> pageResult = newsEntryService.listPage(
                 form.getFrom(),
                 form.getTo(),
                 form.getQ(),
-                tags
+                tags,
+                safePage,
+                5
         );
-        model.addAttribute("entries", entries);
+        model.addAttribute("entries", pageResult.getContent());
         model.addAttribute("activePage", "filters");
         model.addAttribute("basePath", resolveBasePath(request));
+        model.addAttribute("page", safePage);
+        model.addAttribute("totalPages", pageResult.getTotalPages());
+        model.addAttribute("filterPageBase", buildFilterPageBase(resolveBasePath(request), form, hashtag));
         return "filters";
     }
 
@@ -123,9 +141,9 @@ public class NewsPageController {
         return "redirect:" + resolveBasePath(request);
     }
 
-    private void populateHome(Model model, NewsEntryForm form) {
+    private void populateHome(Model model, NewsEntryForm form, List<NewsEntryResponse> entries) {
         model.addAttribute("entryForm", form);
-        model.addAttribute("entries", newsEntryService.list(null, null, null, Set.of()));
+        model.addAttribute("entries", entries);
         model.addAttribute("hashtags", hashtagService.listHashtags(null).stream()
                 .map(h -> h.tag())
                 .toList());
@@ -205,5 +223,31 @@ public class NewsPageController {
             prefix = "/" + prefix;
         }
         return prefix.endsWith("/") ? prefix : prefix + "/";
+    }
+
+    private String buildFilterPageBase(String basePath, FilterForm form, String hashtag) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromPath(basePath + "filtros");
+        if (form.getFrom() != null) {
+            builder.queryParam("from", form.getFrom());
+        }
+        if (form.getTo() != null) {
+            builder.queryParam("to", form.getTo());
+        }
+        if (form.getQ() != null && !form.getQ().isBlank()) {
+            builder.queryParam("q", form.getQ());
+        }
+        if (hashtag != null && !hashtag.isBlank()) {
+            builder.queryParam("hashtag", hashtag);
+        } else if (form.getHashtags() != null && !form.getHashtags().isBlank()) {
+            builder.queryParam("hashtags", form.getHashtags());
+        }
+        String uri = builder.build().toUriString();
+        return uri.contains("?") ? uri + "&" : uri + "?";
+    }
+
+    private void addPaginationModel(Model model, Page<NewsEntryResponse> pageResult, String basePath) {
+        model.addAttribute("page", pageResult.getNumber());
+        model.addAttribute("totalPages", pageResult.getTotalPages());
+        model.addAttribute("pageBase", basePath + "?");
     }
 }

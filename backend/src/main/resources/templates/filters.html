@@ -84,6 +84,14 @@
         </div>
       </article>
     </div>
+
+    <div class="pagination" th:if="${totalPages > 1}">
+      <span class="page-link disabled" th:if="${page == 0}">← Anterior</span>
+      <a class="page-link" th:if="${page > 0}" th:href="${filterPageBase + 'page=' + (page - 1)}">← Anterior</a>
+      <span class="page-meta">Página <span th:text="${page + 1}"></span> de <span th:text="${totalPages}"></span></span>
+      <span class="page-link disabled" th:if="${page + 1 >= totalPages}">Siguiente →</span>
+      <a class="page-link" th:if="${page + 1 < totalPages}" th:href="${filterPageBase + 'page=' + (page + 1)}">Siguiente →</a>
+    </div>
   </section>
 </main>
 </body>

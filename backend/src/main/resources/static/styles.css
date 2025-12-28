@@ -325,6 +325,40 @@ a:visited {
   color: #d7b896;
 }
 
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+  background: #2b2d2f;
+}
+
+.page-link:hover {
+  border-color: var(--accent);
+}
+
+.page-link.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.page-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 @media (max-width: 720px) {
   main { padding: 20px 14px 50px; }
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }

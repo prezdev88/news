@@ -10,6 +10,8 @@ import com.example.news.mapper.NewsEntryMapper;
 import com.example.news.repository.NewsEntryRepository;
 import com.example.news.spec.NewsEntrySpecifications;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +58,20 @@ public class NewsEntryService {
         return newsEntryRepository.findAll(spec, sort).stream()
                 .map(mapper::toResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<NewsEntryResponse> listPage(java.time.LocalDate from,
+                                            java.time.LocalDate to,
+                                            String q,
+                                            Set<String> hashtags,
+                                            int page,
+                                            int size) {
+        Set<String> normalized = hashtags == null ? Set.of() : hashtagNormalizer.normalizeMany(hashtags);
+        var spec = NewsEntrySpecifications.withFilters(from, to, q, normalized);
+        Sort sort = Sort.by(Sort.Order.desc("date"), Sort.Order.desc("createdAt"));
+        PageRequest pageable = PageRequest.of(page, size, sort);
+        return newsEntryRepository.findAll(spec, pageable).map(mapper::toResponse);
     }
 
     @Transactional(readOnly = true)
