@@ -67,33 +67,46 @@
     </section>
   </div>
 
-  <section class="panel" style="margin-top: 24px;">
+  <section class="panel timeline-panel" style="margin-top: 24px;">
     <div class="panel-title">
       <h3>Entradas</h3>
       <div class="muted small" th:if="${#lists.isEmpty(entries)}">Sin registros todavía.</div>
     </div>
 
-    <div class="grid" style="margin-top: 12px;">
-      <div class="entry-card" th:each="entry : ${entries}">
-        <div class="entry-date" th:text="${entry.date}"></div>
-        <div class="entry-headline" th:text="${entry.headline}"></div>
-        <div style="margin: 8px 0;">
-          <a class="tag" th:each="tag : ${entry.hashtags}" th:href="${basePath + 'filtros?hashtag=' + #uris.escapeQueryParam(tag)}" th:text="${'#' + tag}"></a>
+    <div class="timeline" style="margin-top: 12px;">
+      <article class="timeline-item" th:each="entry : ${entries}">
+        <div class="timeline-marker">
+          <div class="timeline-dot"></div>
         </div>
-        <div class="entry-actions">
-          <a class="link" th:href="${basePath + 'entries/' + entry.id + '/edit'}">Editar</a>
-          <form th:action="${basePath + 'entries/' + entry.id + '/delete'}" method="post">
-            <button class="ghost" type="submit" onclick="return confirm('¿Eliminar esta entrada?');">Eliminar</button>
-          </form>
+        <div class="entry-card">
+          <div class="entry-header">
+            <div>
+              <div class="entry-date" th:text="${#temporals.format(entry.date, 'dd-MMM-yyyy', new java.util.Locale('es','ES'))}"></div>
+              <div class="entry-headline" th:text="${entry.headline}"></div>
+            </div>
+            <div class="entry-actions">
+              <a class="icon-button" th:href="${basePath + 'entries/' + entry.id + '/edit'}" title="Editar" aria-label="Editar">
+                ✎
+              </a>
+              <form th:action="${basePath + 'entries/' + entry.id + '/delete'}" method="post">
+                <button class="icon-button ghost" type="submit" title="Eliminar" aria-label="Eliminar" th:attr="data-headline=${entry.headline}">🗑</button>
+              </form>
+            </div>
+          </div>
+
+          <div class="tag-row">
+            <a class="tag" th:each="tag : ${entry.hashtags}" th:href="${basePath + 'filtros?hashtag=' + #uris.escapeQueryParam(tag)}" th:text="${'#' + tag}"></a>
+          </div>
+
+          <div class="sources" th:if="${entry.sources != null and !#lists.isEmpty(entry.sources)}">
+            Fuentes:
+            <span th:each="s, iter : ${entry.sources}">
+              [<span th:text="${iter.index + 1}"></span>]
+              <a th:href="${s.url}" th:text="${s.name}" target="_blank" rel="noreferrer"></a>
+            </span>
+          </div>
         </div>
-        <div class="sources" th:if="${entry.sources != null and !#lists.isEmpty(entry.sources)}">
-          Fuentes:
-          <span th:each="s, iter : ${entry.sources}">
-            [<span th:text="${iter.index + 1}"></span>]
-            <a th:href="${s.url}" th:text="${s.name}" target="_blank" rel="noreferrer"></a>
-          </span>
-        </div>
-      </div>
+      </article>
     </div>
   </section>
 </main>

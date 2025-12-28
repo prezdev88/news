@@ -45,3 +45,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   reindex();
 });
+
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const button = target.closest('button[data-headline]');
+  if (button) {
+    const headline = button.dataset.headline || 'esta entrada';
+    if (!confirm(`¿Eliminar: ${headline}?`)) {
+      event.preventDefault();
+    }
+  }
+});
