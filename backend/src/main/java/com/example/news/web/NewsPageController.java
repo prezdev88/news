@@ -68,13 +68,19 @@ public class NewsPageController {
 
     @GetMapping({"/filtros", "/filtros/"})
     public String filters(@ModelAttribute("filterForm") FilterForm form,
+                          @RequestParam(value = "hashtag", required = false) String hashtag,
                           HttpServletRequest request,
                           Model model) {
+        Set<String> tags = parseTags(form.getHashtags());
+        if (hashtag != null && !hashtag.isBlank()) {
+            tags.add(hashtag);
+            form.setHashtags(hashtag);
+        }
         List<NewsEntryResponse> entries = newsEntryService.list(
                 form.getFrom(),
                 form.getTo(),
                 form.getQ(),
-                parseTags(form.getHashtags())
+                tags
         );
         model.addAttribute("entries", entries);
         model.addAttribute("activePage", "filters");

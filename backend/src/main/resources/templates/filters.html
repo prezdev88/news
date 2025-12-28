@@ -54,7 +54,7 @@
         <div class="entry-date" th:text="${entry.date}"></div>
         <div class="entry-headline" th:text="${entry.headline}"></div>
         <div style="margin: 8px 0;">
-          <span class="tag" th:each="tag : ${entry.hashtags}" th:text="${'#' + tag}"></span>
+          <a class="tag" th:each="tag : ${entry.hashtags}" th:href="${basePath + 'filtros?hashtag=' + #uris.escapeQueryParam(tag)}" th:text="${'#' + tag}"></a>
         </div>
         <div class="entry-actions">
           <a class="link" th:href="${basePath + 'entries/' + entry.id + '/edit'}">Editar</a>
