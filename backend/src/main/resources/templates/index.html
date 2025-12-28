@@ -14,8 +14,8 @@
       <div class="muted">Titulares con hashtags y fuentes</div>
     </div>
     <nav>
-      <a href="./" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
-      <a href="filtros" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
+      <a th:href="${basePath}" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
+      <a th:href="${basePath + 'filtros'}" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
     </nav>
   </header>
 
@@ -23,7 +23,7 @@
     <section>
       <h3>Nueva entrada</h3>
       <div class="notice" th:if="${created}">Entrada creada.</div>
-      <form class="creator" th:action="@{entries}" th:object="${entryForm}" method="post">
+      <form class="creator" style="display:flex; flex-direction:column; gap:12px;" th:action="${basePath + 'entries'}" th:object="${entryForm}" method="post">
         <div class="sources-wrapper" data-sources>
           <div>
             <strong>Fuentes</strong>
@@ -79,6 +79,12 @@
         <div class="entry-headline" th:text="${entry.headline}"></div>
         <div style="margin: 8px 0;">
           <span class="tag" th:each="tag : ${entry.hashtags}" th:text="${'#' + tag}"></span>
+        </div>
+        <div class="entry-actions">
+          <a class="link" th:href="${basePath + 'entries/' + entry.id + '/edit'}">Editar</a>
+          <form th:action="${basePath + 'entries/' + entry.id + '/delete'}" method="post">
+            <button class="ghost" type="submit" onclick="return confirm('¿Eliminar esta entrada?');">Eliminar</button>
+          </form>
         </div>
         <div class="sources" th:if="${entry.sources != null and !#lists.isEmpty(entry.sources)}">
           Fuentes:

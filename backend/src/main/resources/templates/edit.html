@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>News Timeline - Editar</title>
+  <link rel="stylesheet" th:href="${basePath + 'styles.css'}">
+</head>
+<body>
+<main>
+  <header class="page-header">
+    <div>
+      <h1>News Timeline</h1>
+      <div class="muted">Editar entrada</div>
+    </div>
+    <nav>
+      <a th:href="${basePath}" th:classappend="${activePage} == 'home' ? 'active' : ''">Inicio</a>
+      <a th:href="${basePath + 'filtros'}" th:classappend="${activePage} == 'filters' ? 'active' : ''">Filtros</a>
+    </nav>
+  </header>
+
+  <section class="panel">
+    <h3>Editar entrada</h3>
+    <form class="creator" style="display:flex; flex-direction:column; gap:12px;" th:object="${entryForm}" method="post">
+      <div class="sources-wrapper" data-sources>
+        <div>
+          <strong>Fuentes</strong>
+          <div class="muted small">Puedes agregar todas las que necesites.</div>
+          <button type="button" class="secondary" data-add-source>Añadir fuente</button>
+        </div>
+        <div class="source-row" th:each="src, iter : *{sources}" data-source-row>
+          <input type="url" placeholder="URL (https://...)" th:field="*{sources[__${iter.index}__].url}">
+          <div class="source-actions">
+            <button type="button" class="ghost" data-remove-source th:if="${iter.size} > 1">Eliminar</button>
+          </div>
+        </div>
+      </div>
+
+      <label>
+        <span>Headline *</span>
+        <input type="text" th:field="*{headline}" required>
+      </label>
+
+      <label>
+        <span>Fecha *</span>
+        <input type="date" th:field="*{date}" required>
+      </label>
+
+      <label>
+        <span>Hashtags (coma)</span>
+        <input type="text" placeholder="kast,venezuela" th:field="*{hashtags}">
+      </label>
+
+      <div class="submit-row">
+        <button type="submit">Guardar cambios</button>
+        <a class="link" th:href="${basePath}">Cancelar</a>
+      </div>
+    </form>
+  </section>
+</main>
+
+<template id="source-template">
+  <div class="source-row" data-source-row>
+    <input type="url" placeholder="URL (https://...)" name="sources[__index__].url">
+    <div class="source-actions">
+      <button type="button" class="ghost" data-remove-source>Eliminar</button>
+    </div>
+  </div>
+</template>
+
+<script th:src="${basePath + 'app.js'}"></script>
+</body>
+</html>

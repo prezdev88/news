@@ -11,6 +11,7 @@ import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -22,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.UUID;
 
 @Controller
 public class NewsPageController {
@@ -35,12 +37,15 @@ public class NewsPageController {
     }
 
     @GetMapping("/")
-    public String home(@RequestParam(value = "created", required = false) String created, Model model) {
+    public String home(@RequestParam(value = "created", required = false) String created,
+                       HttpServletRequest request,
+                       Model model) {
         NewsEntryForm form = new NewsEntryForm();
         ensureSourceRow(form);
         populateHome(model, form);
         model.addAttribute("created", created != null);
         model.addAttribute("activePage", "home");
+        model.addAttribute("basePath", resolveBasePath(request));
         return "index";
     }
 
@@ -62,7 +67,9 @@ public class NewsPageController {
     }
 
     @GetMapping({"/filtros", "/filtros/"})
-    public String filters(@ModelAttribute("filterForm") FilterForm form, Model model) {
+    public String filters(@ModelAttribute("filterForm") FilterForm form,
+                          HttpServletRequest request,
+                          Model model) {
         List<NewsEntryResponse> entries = newsEntryService.list(
                 form.getFrom(),
                 form.getTo(),
@@ -71,7 +78,43 @@ public class NewsPageController {
         );
         model.addAttribute("entries", entries);
         model.addAttribute("activePage", "filters");
+        model.addAttribute("basePath", resolveBasePath(request));
         return "filters";
+    }
+
+    @GetMapping("/entries/{id}/edit")
+    public String edit(@PathVariable("id") UUID id, HttpServletRequest request, Model model) {
+        NewsEntryResponse entry = newsEntryService.get(id);
+        NewsEntryForm form = toForm(entry);
+        ensureSourceRow(form);
+        model.addAttribute("entryForm", form);
+        model.addAttribute("entryId", id);
+        model.addAttribute("activePage", "home");
+        model.addAttribute("basePath", resolveBasePath(request));
+        return "edit";
+    }
+
+    @PostMapping("/entries/{id}/edit")
+    public String update(@PathVariable("id") UUID id,
+                         @Valid @ModelAttribute("entryForm") NewsEntryForm form,
+                         BindingResult bindingResult,
+                         HttpServletRequest request,
+                         Model model) {
+        if (bindingResult.hasErrors()) {
+            ensureSourceRow(form);
+            model.addAttribute("entryId", id);
+            model.addAttribute("activePage", "home");
+            model.addAttribute("basePath", resolveBasePath(request));
+            return "edit";
+        }
+        newsEntryService.update(id, toRequest(form));
+        return "redirect:" + resolveBasePath(request);
+    }
+
+    @PostMapping("/entries/{id}/delete")
+    public String delete(@PathVariable("id") UUID id, HttpServletRequest request) {
+        newsEntryService.delete(id);
+        return "redirect:" + resolveBasePath(request);
     }
 
     private void populateHome(Model model, NewsEntryForm form) {
@@ -128,6 +171,23 @@ public class NewsPageController {
         } catch (IllegalArgumentException ignored) {
         }
         return url;
+    }
+
+    private NewsEntryForm toForm(NewsEntryResponse entry) {
+        NewsEntryForm form = new NewsEntryForm();
+        form.setDate(entry.date());
+        form.setHeadline(entry.headline());
+        form.setHashtags(String.join(",", entry.hashtags()));
+        List<NewsEntrySourceForm> sources = new ArrayList<>();
+        if (entry.sources() != null) {
+            for (var source : entry.sources()) {
+                NewsEntrySourceForm src = new NewsEntrySourceForm();
+                src.setUrl(source.url());
+                sources.add(src);
+            }
+        }
+        form.setSources(sources);
+        return form;
     }
 
     private String resolveBasePath(HttpServletRequest request) {
