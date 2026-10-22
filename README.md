@@ -17,6 +17,18 @@ La edición reserva **al menos una noticia de Tecnología** cuando hay artículo
 
 En la vista previa, usa la **rueda del mouse** para acercar o alejar el periódico, centrando el zoom donde está el puntero. Mantén pulsado el botón izquierdo y **arrastra** para recorrer la hoja ampliada. Pulsa **Ajustar página** o haz **doble clic** para volver a ver la página completa.
 
+## Elegir y añadir fuentes
+
+En **Tu edición**, pulsa **Fuentes**. El número del botón indica cuántas secciones están activas.
+
+1. Marca la columna **Usar** para activar o desactivar una fuente. También puedes seleccionar una fila y pulsar **Activar / desactivar** o la barra espaciadora.
+2. Pulsa **Añadir…**, escribe el nombre del medio, pega una **URL de sección o RSS/Atom** y elige **Nacionales** o **Tecnología**.
+3. Pulsa **Guardar fuente** y luego **Guardar fuentes** para aplicar la selección.
+
+Puedes editar o eliminar entradas. **Restaurar fuentes iniciales** recupera y activa los medios incluidos, conservando las fuentes nuevas. **Cancelar** cierra el gestor sin aplicar sus cambios. Las preferencias se guardan en `config.json` y se usan tanto en la app como al generar desde la terminal.
+
+Las fuentes nuevas se filtran por relación con Chile, fecha y texto suficiente. Se admite que los artículos tengan URLs sin fecha, y que un RSS alojado en otro dominio enlace al sitio del medio. La lectura funciona con RSS/Atom y páginas que entregan el texto en su HTML o metadatos; un sitio que solo lo carga con JavaScript, exige iniciar sesión o bloquea las descargas puede requerir un lector específico. Las secciones de noticias nacionales y tecnología de un mismo medio se pueden activar por separado.
+
 ## Imprimir
 
 Pulsa **Imprimir PDF…**, selecciona la impresora y confirma con **Imprimir en negro**. Se envía **una copia, por una cara, en Carta (Letter) y blanco y negro** con los valores predeterminados. El diálogo permite cambiar a A4. La app recuerda la impresora elegida y recupera la última edición guardada al abrirse, por lo que puedes imprimirla sin volver a consultar noticias ni usar el modelo.
@@ -86,7 +98,7 @@ Cada artículo se resume por separado. Si recibes errores de contexto, reduce `c
 
 ## Preparación de la edición
 
-1. Consulta el RSS nacional de Cooperativa y las portadas nacionales de BioBioChile y El Mostrador. Si falla el RSS, intenta la portada de Cooperativa. También consulta [PC e Internet de BioBioChile](https://www.biobiochile.cl/lista/categorias/pc-e-internet) y [Agenda Innovación de El Mostrador](https://www.elmostrador.cl/agenda-pais/agenda-innovacion/).
+1. Consulta únicamente las fuentes activas. De inicio incluye el RSS nacional de Cooperativa y las portadas nacionales de BioBioChile y El Mostrador. Si falla el RSS de Cooperativa, intenta su portada nacional. También incluye [PC e Internet de BioBioChile](https://www.biobiochile.cl/lista/categorias/pc-e-internet) y [Agenda Innovación de El Mostrador](https://www.elmostrador.cl/agenda-pais/agenda-innovacion/). Las URLs añadidas por el usuario se leen como RSS/Atom o como páginas de enlaces según su contenido.
 2. Acepta artículos con fecha dentro del período solicitado y al menos 80 palabras de texto accesible. En las fuentes de tecnología exige además señales de relación con Chile en el artículo y vocabulario tecnológico. Descarta textos insuficientes, notas antiguas y duplicados de título. No se eluden bloqueos ni suscripciones.
 3. Envía al modelo hasta ocho candidatos por portada nacional y cuatro por sección tecnológica, con titular y extracto, para seleccionar exactamente la cantidad elegida. Pide variedad y un solo artículo por acontecimiento. Cuando hay candidatos de tecnología, garantiza al menos uno dentro del total, aunque el modelo ignore la instrucción de reservarlo. Si el modelo devuelve una cantidad distinta, se le pide corregirla. Si no hay suficientes artículos utilizables, la app lo indica y pide ampliar el período o elegir menos noticias. Es una selección editorial automatizada, no un ranking objetivo de todas las noticias del país.
 4. Resume cada artículo seleccionado. El modelo recibe hasta 8.000 caracteres por nota, instrucciones para conservar atribuciones e incertidumbres y un esquema JSON. Las extensiones pedidas son objetivos editoriales: se acepta un resumen sustancial algo más breve y un pequeño margen adicional en palabras y titular. Se comprueba la estructura y que las cifras escritas con dígitos aparezcan en el texto suministrado. Si hace falta corregir algo, se envía el borrador real con sus medidas y el motivo del rechazo; si vuelve a fallar, la generación se detiene. No se rellenan los textos ni se recortan frases automáticamente para alcanzar una cifra exacta de palabras.
@@ -98,7 +110,7 @@ Los resultados se guardan en `output/` con fecha y hora:
 
 - `.pdf`: periódico con texto seleccionable y enlaces a las fuentes.
 - `.png`: vista previa de la página.
-- `.json`: artículos utilizados, textos descargados, resúmenes, modelo, cantidad solicitada e incluida y avisos de lectura. No contiene claves de API.
+- `.json`: fuentes activas, artículos utilizados, textos descargados, resúmenes, modelo, cantidad solicitada e incluida y avisos de lectura. No contiene claves de API.
 
 Se generan PDFs bajo demanda. La app no instala tareas programadas.
 
@@ -119,6 +131,8 @@ python3 -m unittest discover -s tests -v
 Las pruebas cubren filtros de país y fecha, extracción de artículos, errores de la API local, respuestas JSON inválidas, cifras añadidas y el flujo completo de generación con fuentes y respuestas de modelo simuladas. Se verifican las opciones de impresión Carta, blanco y negro, una copia y ausencia de portadas con CUPS simulado; las pruebas no envían trabajos reales. También se comprueba el PDF con `pdfinfo` y `qpdf` cuando están disponibles. Las pruebas no requieren LM Studio ni acceso a internet.
 
 La vista previa se prueba con imágenes reales y un lienzo simulado: zoom bajo el puntero, límites de desplazamiento, vuelta a página completa, colores y agrupación de eventos antes de dibujar. La interacción usa cuadros rápidos y afina la imagen tras 150 ms sin movimiento. Estas pruebas no necesitan abrir una ventana.
+
+También se comprueba la compatibilidad con configuraciones anteriores, la persistencia de las fuentes elegidas, las fuentes desactivadas, los RSS/Atom externos, los artículos sin fecha en la URL y la conservación de los filtros de Chile, tecnología y actualidad al usar medios nuevos.
 
 La prueba con noticias reales y tu modelo requiere ejecutar la app en un entorno con acceso al servidor local y a los medios. En el entorno de desarrollo restringido no fue posible alcanzar `localhost:1234` ni resolver los dominios de noticias.
 

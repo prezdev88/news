@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -22,6 +22,51 @@ class Source:
     feed_url: str = ""
     section: str = ""
     require_chile: bool = False
+    enabled: bool = True
+    require_date_in_url: bool = True
+    allow_external_feed_articles: bool = False
+
+    @property
+    def url(self) -> str:
+        return self.feed_url or self.page_url
+
+    def validate(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise AppError("Escribe el nombre del medio.")
+        urls = (self.page_url,) + ((self.feed_url,) if self.feed_url != "" else ())
+        for url in urls:
+            if not isinstance(url, str):
+                raise AppError("La URL de la fuente debe ser texto.")
+            try:
+                parsed = urlparse(url)
+                parsed.port
+                host = parsed.hostname
+            except ValueError as exc:
+                raise AppError("La URL de la fuente no es válida.") from exc
+            if parsed.scheme not in {"http", "https"} or not host:
+                raise AppError("La URL de la fuente debe comenzar con http:// o https://.")
+            if parsed.username or parsed.password or any(char.isspace() for char in url):
+                raise AppError("Usa una URL de fuente sin credenciales ni espacios.")
+        if not isinstance(self.article_prefix, str) or not self.article_prefix.startswith("/"):
+            raise AppError("La ruta de artículos debe comenzar con /.")
+        if self.section not in {"", "Tecnología"}:
+            raise AppError("Elige noticias nacionales o tecnología para la fuente.")
+        if any(type(value) is not bool for value in (self.enabled, self.require_chile, self.require_date_in_url, self.allow_external_feed_articles)):
+            raise AppError("Las opciones de la fuente deben ser valores booleanos.")
+
+
+def custom_source(name: str, url: str, section: str = "", previous: Source | None = None) -> Source:
+    name, url = name.strip(), url.strip()
+    if previous and url == previous.url:
+        source = replace(previous, name=name, section=section, require_chile=previous.require_chile or section == "Tecnología")
+    else:
+        source = Source(
+            name, url, "/", section=section, require_chile=True,
+            enabled=previous.enabled if previous else True,
+            require_date_in_url=False, allow_external_feed_articles=True,
+        )
+    source.validate()
+    return source
 
 
 SOURCES = (
@@ -71,6 +116,11 @@ class Settings:
     max_output_tokens: int = 4096
     max_article_chars: int = 8000
     output_dir: str = str(ROOT / "output")
+    sources: tuple[Source, ...] = SOURCES
+
+    @property
+    def active_sources(self) -> tuple[Source, ...]:
+        return tuple(source for source in self.sources if source.enabled)
 
     @property
     def api_key(self) -> str:
@@ -107,6 +157,24 @@ class Settings:
             raise AppError("El límite de texto por artículo debe estar entre 2000 y 16000 caracteres.")
         if not self.output_dir.strip():
             raise AppError("Selecciona una carpeta para guardar el PDF.")
+        if not isinstance(self.sources, (list, tuple)):
+            raise AppError("Las fuentes deben ser una lista.")
+        sources = []
+        seen = set()
+        for item in self.sources:
+            try:
+                source = Source(**item) if isinstance(item, dict) else item
+            except TypeError as exc:
+                raise AppError("Una fuente tiene campos inválidos.") from exc
+            if not isinstance(source, Source):
+                raise AppError("Hay una fuente con formato inválido.")
+            source.validate()
+            key = source.url.rstrip("/")
+            if key in seen:
+                raise AppError(f"La fuente {source.name} tiene una URL repetida.")
+            seen.add(key)
+            sources.append(source)
+        self.sources = tuple(sources)
 
 
 def load_settings(path: Path = CONFIG_PATH) -> Settings:

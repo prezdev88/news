@@ -24,6 +24,8 @@ def serialize(value):
 
 def generate(settings: Settings, progress=print) -> Path:
     settings.validate()
+    if not settings.active_sources:
+        raise AppError("Activa al menos una fuente en «Fuentes de noticias».")
     progress("Conectando con LM Studio…")
     client = LMStudio(settings, progress=progress)
     model = client.select_model()
@@ -64,6 +66,7 @@ def generate(settings: Settings, progress=print) -> Path:
         edition["stories"] = compact_stories
         render_edition(edition, pdf_path, settings.paper)
     edition["paper"] = settings.paper
+    edition["sources"] = [asdict(source) for source in settings.active_sources]
     edition["candidate_count"] = len(articles)
     edition["printed_count"] = len(edition["stories"])
     edition["technology_count"] = sum(story["section"] == "Tecnología" for story in edition["stories"])

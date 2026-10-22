@@ -8,14 +8,14 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
 
-from .config import AppError, SOURCES, Settings, Source
+from .config import AppError, Settings, Source
 
 CHILE = ZoneInfo("America/Santiago")
 USER_AGENT = "LaManana/1.0 (personal news reader; public articles only)"
@@ -85,17 +85,27 @@ def parse_date(value: str | None) -> datetime | None:
 
 def canonical_url(value: str) -> str:
     parsed = urlparse(value)
-    return urlunparse((parsed.scheme, parsed.netloc.lower(), parsed.path, "", "", ""))
+    query = [(key, item) for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+             if not key.lower().startswith("utm_") and key.lower() not in {"fbclid", "gclid", "msclkid"}]
+    return urlunparse((parsed.scheme, parsed.netloc.lower(), parsed.path or "/", parsed.params, urlencode(query), ""))
 
 
-def is_national_article(url: str, source: Source) -> bool:
-    parsed = urlparse(url)
-    expected_host = urlparse(source.page_url).hostname
+def is_national_article(url: str, source: Source, *, from_feed: bool = False) -> bool:
+    try:
+        parsed = urlparse(url)
+        expected_host = urlparse(source.page_url).hostname
+        host = parsed.hostname
+    except ValueError:
+        return False
+    same_host = bool(host and expected_host and host.removeprefix("www.") == expected_host.removeprefix("www."))
     return (
         parsed.scheme in {"http", "https"}
-        and parsed.hostname == expected_host
-        and parsed.path.startswith(source.article_prefix)
-        and ARTICLE_DATE.search(parsed.path) is not None
+        and bool(host)
+        and not parsed.username and not parsed.password
+        and (same_host or (from_feed and source.allow_external_feed_articles))
+        and (parsed.path or "/").startswith(source.article_prefix)
+        and (not source.require_date_in_url or ARTICLE_DATE.search(parsed.path) is not None)
+        and canonical_url(url).rstrip("/") != canonical_url(source.page_url).rstrip("/")
     )
 
 
@@ -118,7 +128,7 @@ def parse_feed(content: str | bytes, source: Source) -> list[Article]:
     result = []
     for entry in feedparser.parse(content).entries:
         url = canonical_url(urljoin(source.page_url, entry.get("link", "")))
-        if not is_national_article(url, source):
+        if not is_national_article(url, source, from_feed=True):
             continue
         title = clean_text(BeautifulSoup(entry.get("title", ""), "html.parser").get_text(" "))
         published = parse_date(entry.get("published"))
@@ -226,13 +236,16 @@ def is_recent(article: Article, now: datetime, hours: int) -> bool:
 
 
 def collect_news(settings: Settings, progress=print, session=None, now=None) -> tuple[list[Article], list[str]]:
+    settings.validate()
+    if not settings.active_sources:
+        raise AppError("Activa al menos una fuente en «Fuentes de noticias».")
     now = now or datetime.now(CHILE)
     session = session or requests.Session()
     session.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "es-CL,es;q=0.9"})
     articles = []
     warnings = []
     seen_urls = set()
-    for source in SOURCES:
+    for source in settings.active_sources:
         label = f"{source.name} · {source.section}" if source.section else source.name
         progress(f"Leyendo {label}…")
         candidates = []
@@ -243,7 +256,8 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
                 warnings.append(f"{source.name}: RSS no disponible ({type(exc).__name__}); se intenta la portada nacional.")
         if not candidates:
             try:
-                candidates = parse_listing(_download(session, source.page_url), source)
+                content = _download(session, source.page_url)
+                candidates = parse_feed(content, source) or parse_listing(content, source)
             except (requests.RequestException, AppError, LookupError) as exc:
                 warnings.append(f"{source.name}: no se pudo leer la portada ({type(exc).__name__}).")
                 continue
@@ -279,6 +293,8 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
             warnings.append(f"{source.name}: {failures} notas descartadas por acceso, fecha o texto insuficiente.")
         if not candidates:
             warnings.append(f"{label}: no se encontraron artículos en la página.")
+        elif not accepted and not failures:
+            warnings.append(f"{label}: ninguna nota cumplió los filtros de fecha, contenido y relación con Chile.")
     if not any(is_technology_article(article) for article in articles):
         warning = (
             f"No se encontraron noticias de tecnología relacionadas con Chile en las fuentes consultadas "

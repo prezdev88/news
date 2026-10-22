@@ -15,6 +15,7 @@ from .config import AppError, Settings, load_settings, save_settings
 from .lmstudio import LMStudio
 from .pipeline import generate, open_pdf
 from .printing import list_printers, print_pdf
+from .source_dialog import SourcesDialog
 
 BACKGROUND = "#efeee8"
 PAPER = "#ffffff"
@@ -74,6 +75,7 @@ class NewspaperApp:
         style.configure("TEntry", padding=8, fieldbackground=PAPER)
         style.configure("TCombobox", padding=7, fieldbackground=PAPER)
         style.configure("TButton", padding=(12, 9), font=("DejaVu Sans", 9))
+        style.configure("Compact.TButton", padding=(8, 3))
         style.configure("Primary.TButton", background=ACCENT, foreground="white", padding=(18, 13), font=("DejaVu Sans", 11, "bold"))
         style.map("Primary.TButton", background=[("active", "#35664e"), ("disabled", "#8b9990")])
         outer = ttk.Frame(self.root, padding=28)
@@ -119,7 +121,11 @@ class NewspaperApp:
         self.model_box.pack(side="left", fill="x", expand=True)
         self.discover_button = ttk.Button(model_row, text="Detectar", command=self.discover)
         self.discover_button.pack(side="right", padx=(8, 0))
-        ttk.Label(left, text="02   TU EDICIÓN", font=("DejaVu Sans", 9, "bold")).pack(anchor="w", pady=(12, 12))
+        edition_header = ttk.Frame(left)
+        edition_header.pack(fill="x", pady=(12, 8))
+        ttk.Label(edition_header, text="02   TU EDICIÓN", font=("DejaVu Sans", 9, "bold")).pack(side="left")
+        self.sources_button = ttk.Button(edition_header, text=f"Fuentes ({len(self.settings.active_sources)})…", style="Compact.TButton", command=self.manage_sources)
+        self.sources_button.pack(side="right")
         options = ttk.Frame(left)
         options.pack(fill="x")
         for key, title, value, values in (
@@ -162,11 +168,25 @@ class NewspaperApp:
         if directory:
             self.fields["output_dir"].set(directory)
 
+    def manage_sources(self):
+        if self.busy:
+            return
+
+        def apply(sources):
+            settings = replace(self.read_settings(), sources=sources)
+            save_settings(settings)
+            self.settings = settings
+            self.sources_button.configure(text=f"Fuentes ({len(settings.active_sources)})…")
+            self.status.set(f"Fuentes guardadas: {len(settings.active_sources)} secciones activas.")
+
+        SourcesDialog(self.root, self.settings.sources, apply)
+
     def set_busy(self, value):
         self.busy = value
         state = "disabled" if value else "normal"
         self.generate_button.configure(state=state)
         self.discover_button.configure(state=state)
+        self.sources_button.configure(state=state)
         self.print_button.configure(state="normal" if self.latest_pdf and not value else "disabled")
         if value:
             self.progress.start(12)
