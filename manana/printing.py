@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import AppError
+from .sorting import alphabetical_key
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ def list_printers() -> PrinterList:
         names += (default,)
     if not default and len(names) == 1:
         default = names[0]
-    return PrinterList(names, default)
+    return PrinterList(tuple(sorted(names, key=alphabetical_key)), default)
 
 
 def monochrome_driver_options(options: str) -> list[str]:

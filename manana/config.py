@@ -2,16 +2,39 @@ from __future__ import annotations
 
 import json
 import os
+import unicodedata
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .sorting import alphabetical_key
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config.json"
+DEFAULT_TOPICS = tuple(sorted(("Nacionales", "Política", "Economía", "Sociedad", "Regiones", "Salud", "Educación", "Medioambiente", "Seguridad", "Tecnología", "Deportes", "Cultura", "Ciencia"), key=alphabetical_key))
 
 
 class AppError(Exception):
     """An actionable error that can be shown directly to the user."""
+
+
+def topic_name(value: str, *, allow_empty=False) -> str:
+    if not isinstance(value, str):
+        raise AppError("El nombre del tema debe ser texto.")
+    name = " ".join(unicodedata.normalize("NFC", value).split())
+    if not name and allow_empty:
+        return ""
+    if not name or len(name) > 40:
+        raise AppError("El nombre del tema debe tener entre 1 y 40 caracteres.")
+    return name
+
+
+def source_topic(source) -> str:
+    return source.section or "Nacionales"
+
+
+def source_sort_key(source):
+    return alphabetical_key(source.name), alphabetical_key(source_topic(source)), alphabetical_key(source.url)
 
 
 @dataclass(frozen=True)
@@ -49,14 +72,16 @@ class Source:
                 raise AppError("Usa una URL de fuente sin credenciales ni espacios.")
         if not isinstance(self.article_prefix, str) or not self.article_prefix.startswith("/"):
             raise AppError("La ruta de artículos debe comenzar con /.")
-        if self.section not in {"", "Tecnología"}:
-            raise AppError("Elige noticias nacionales o tecnología para la fuente.")
+        topic_name(self.section, allow_empty=True)
         if any(type(value) is not bool for value in (self.enabled, self.require_chile, self.require_date_in_url, self.allow_external_feed_articles)):
             raise AppError("Las opciones de la fuente deben ser valores booleanos.")
 
 
 def custom_source(name: str, url: str, section: str = "", previous: Source | None = None) -> Source:
     name, url = name.strip(), url.strip()
+    section = topic_name(section, allow_empty=True)
+    if section.casefold() == "nacionales":
+        section = ""
     if previous and url == previous.url:
         source = replace(previous, name=name, section=section, require_chile=previous.require_chile or section == "Tecnología")
     else:
@@ -69,7 +94,7 @@ def custom_source(name: str, url: str, section: str = "", previous: Source | Non
     return source
 
 
-SOURCES = (
+SOURCES = tuple(sorted((
     Source(
         "Cooperativa",
         "https://www.cooperativa.cl/noticias/pais",
@@ -100,7 +125,7 @@ SOURCES = (
         section="Tecnología",
         require_chile=True,
     ),
-)
+), key=source_sort_key))
 
 
 @dataclass
@@ -117,6 +142,7 @@ class Settings:
     max_article_chars: int = 8000
     output_dir: str = str(ROOT / "output")
     sources: tuple[Source, ...] = SOURCES
+    topics: tuple[str, ...] = DEFAULT_TOPICS
 
     @property
     def active_sources(self) -> tuple[Source, ...]:
@@ -175,6 +201,50 @@ class Settings:
             seen.add(key)
             sources.append(source)
         self.sources = tuple(sources)
+        if not isinstance(self.topics, (list, tuple)) or not self.topics:
+            raise AppError("Añade al menos un tema para tus noticias.")
+        topics = []
+        names = {}
+        for item in self.topics:
+            name = topic_name(item)
+            if name.casefold() in names:
+                raise AppError(f"El tema {name} está repetido.")
+            names[name.casefold()] = name
+            topics.append(name)
+        normalized_sources = []
+        for source in self.sources:
+            name = topic_name(source.section, allow_empty=True) or "Nacionales"
+            if name.casefold() not in names:
+                names[name.casefold()] = name
+                topics.append(name)
+            name = names[name.casefold()]
+            normalized_sources.append(replace(source, section="" if name == "Nacionales" else name))
+        self.sources = tuple(sorted(normalized_sources, key=source_sort_key))
+        self.topics = tuple(sorted(topics, key=alphabetical_key))
+
+
+def rename_topic(settings: Settings, current: str, name: str) -> Settings:
+    name = topic_name(name)
+    if current not in settings.topics:
+        raise AppError("Selecciona un tema existente.")
+    sources = tuple(replace(source, section="" if name == "Nacionales" else name) if source_topic(source) == current else source for source in settings.sources)
+    result = replace(settings, topics=tuple(name if item == current else item for item in settings.topics), sources=sources)
+    result.validate()
+    return result
+
+
+def remove_topic(settings: Settings, current: str, replacement: str = "") -> Settings:
+    if current not in settings.topics:
+        raise AppError("Selecciona un tema existente.")
+    topics = tuple(item for item in settings.topics if item != current)
+    if not topics:
+        raise AppError("Conserva al menos un tema para tus noticias.")
+    if any(source_topic(source) == current for source in settings.sources) and replacement not in topics:
+        raise AppError("Elige a qué tema reasignar las fuentes antes de eliminarlo.")
+    sources = tuple(replace(source, section="" if replacement == "Nacionales" else replacement) if source_topic(source) == current else source for source in settings.sources)
+    result = replace(settings, topics=topics, sources=sources)
+    result.validate()
+    return result
 
 
 def load_settings(path: Path = CONFIG_PATH) -> Settings:

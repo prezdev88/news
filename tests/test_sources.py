@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from manana.config import AppError, SOURCES, Settings, custom_source, load_settings, save_settings
+from manana.config import AppError, DEFAULT_TOPICS, SOURCES, Settings, custom_source, load_settings, save_settings
 from manana.gui import NewspaperApp
 from manana.news import CHILE, collect_news, is_national_article, parse_feed, parse_listing
 from manana.pipeline import generate
@@ -25,6 +25,7 @@ TITLES = (
     "Emprendedores presentan una plataforma de inteligencia artificial para Chile",
 )
 BODY = "Las comunidades de Chile participaron en la presentación de una propuesta regional. " * 9
+COOPERATIVA = next(source for source in SOURCES if source.name == "Cooperativa")
 
 
 def article_html(title, body=BODY, published=NOW):
@@ -71,7 +72,7 @@ class SourceConfigurationTests(unittest.TestCase):
 
     def test_custom_sources_and_disabled_choices_survive_save_and_reload(self):
         custom = custom_source("Mi medio", "https://medio.example/nacional/", "Tecnología")
-        sources = (replace(SOURCES[0], enabled=False), custom)
+        sources = (replace(COOPERATIVA, enabled=False), custom)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             save_settings(Settings(sources=sources), path)
@@ -79,7 +80,7 @@ class SourceConfigurationTests(unittest.TestCase):
             self.assertEqual(loaded.sources, sources)
             self.assertEqual(loaded.active_sources, (custom,))
             self.assertIsInstance(json.loads(path.read_text())["sources"], list)
-        self.assertTrue(SOURCES[0].enabled)
+        self.assertTrue(COOPERATIVA.enabled)
 
     def test_new_source_validation_rejects_invalid_urls_and_duplicate_entries(self):
         for url in ("medio.example", "file:///tmp/feed.xml", "https://user:password@medio.example", "https://medio.example/a b", "https://[broken", "https://medio.example:bad"):
@@ -93,7 +94,7 @@ class SourceConfigurationTests(unittest.TestCase):
                 Settings(sources=sources).validate()
 
     def test_edit_preserves_preset_rules_until_its_url_changes(self):
-        previous = replace(SOURCES[0], enabled=False)
+        previous = replace(COOPERATIVA, enabled=False)
         renamed = custom_source("Nuevo nombre", previous.url, previous.section, previous)
         self.assertEqual(renamed.page_url, previous.page_url)
         self.assertEqual(renamed.article_prefix, previous.article_prefix)
@@ -105,7 +106,7 @@ class SourceConfigurationTests(unittest.TestCase):
 
     def test_restoring_defaults_preserves_custom_sources(self):
         custom = custom_source("Mi medio", "https://medio.example/section")
-        dialog = SimpleNamespace(sources=[replace(SOURCES[0], enabled=False), custom], refresh=Mock())
+        dialog = SimpleNamespace(sources=[replace(COOPERATIVA, enabled=False), custom], topics=list(DEFAULT_TOPICS), refresh=Mock())
         SourcesDialog.restore_defaults(dialog)
         self.assertIn(custom, dialog.sources)
         self.assertEqual(len(dialog.sources), len(SOURCES) + 1)
@@ -136,7 +137,7 @@ class SourceConfigurationTests(unittest.TestCase):
 class CustomSourceReadingTests(unittest.TestCase):
     def test_custom_source_flows_through_generation_and_is_recorded_in_audit(self):
         active = custom_source("Medio elegido", "https://medio.example/nacional")
-        disabled = replace(SOURCES[0], enabled=False)
+        disabled = replace(COOPERATIVA, enabled=False)
         urls = [f"https://medio.example/noticia-{index}" for index in range(3)]
         pages = {url: article_html(title) for url, title in zip(urls, TITLES)}
         pages[active.url] = "<main>" + "".join(f'<a href="{url}">{title}</a>' for url, title in zip(urls, TITLES)) + "</main>"

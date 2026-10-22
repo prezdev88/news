@@ -21,7 +21,7 @@ def main():
     mode.add_argument("--print-file", type=Path, help="Imprimir un PDF guardado sin volver a generar noticias")
     parser.add_argument("--model", help="Identificador del modelo en LM Studio")
     parser.add_argument("--base-url", help="Servidor local; predeterminado http://localhost:1234/v1")
-    parser.add_argument("--paper", choices=("Carta", "Letter", "A4"), help="Tamaño de papel; predeterminado Carta (Letter)")
+    parser.add_argument("--paper", choices=("A4", "Carta", "Letter"), help="Tamaño de papel; predeterminado Carta (Letter)")
     parser.add_argument("--printer", help="Identificador de la impresora de CUPS")
     parser.add_argument("--print", dest="print_after_generation", action="store_true", help="Imprimir una copia en negro después de generar el PDF")
     parser.add_argument("--count", type=int, choices=range(3, 8), help="Cantidad de noticias: 3–7")

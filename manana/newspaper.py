@@ -8,6 +8,7 @@ from urllib.parse import quote, urlparse
 import cairo
 
 from .config import AppError
+from .sorting import alphabetical_key
 
 SIZES = {"A4": (595.276, 841.89), "Carta": (612.0, 792.0)}
 INK = (0.0, 0.0, 0.0)
@@ -126,17 +127,20 @@ class Typesetter:
             self.context.tag_end(cairo.TAG_LINK)
 
     def story_size(self, story, width, style):
+        section_lines = self.lines(story["section"].upper(), width, 7.5, SANS, bold=True)
         headline_lines = self.lines(story["headline"], width, style.headline_size, bold=True)
         body_lines = self.lines(story["summary"], width, style.body_size)
         return (
-            style.section_gap + len(headline_lines) * style.headline_size * 1.02
+            style.section_gap + max(0, len(section_lines) - 1) * 10 + len(headline_lines) * style.headline_size * 1.02
             + style.paragraph_gap + len(body_lines) * style.body_size * style.body_leading
             + style.source_gap + style.source_height
         )
 
     def draw_story(self, story, x, top, width, style):
-        self.text(story["section"].upper(), x, top, 7.5, SANS, bold=True)
-        y = top + style.section_gap
+        section_lines = self.lines(story["section"].upper(), width, 7.5, SANS, bold=True)
+        for index, line in enumerate(section_lines):
+            self.text(line, x, top + index * 10, 7.5, SANS, bold=True)
+        y = top + style.section_gap + max(0, len(section_lines) - 1) * 10
         y += self.paragraph(story["headline"], x, y, width, style.headline_size, style.headline_size * 1.02, bold=True)
         y += style.paragraph_gap
         y += self.paragraph(story["summary"], x, y, width, style.body_size, style.body_size * style.body_leading)
@@ -156,7 +160,15 @@ def _draw_page(context, edition, paper, links=False):
     typesetter.text("CHILE · EDICIÓN NACIONAL", margin, 33, 7.5, SANS, bold=True)
     typesetter.text("UNA PÁGINA PARA EMPEZAR EL DÍA", margin, 33, 7.0, SANS, align="right", box_width=content_width)
     typesetter.text("La Mañana", margin, 46, 46, SERIF, bold=True, align="center", box_width=content_width)
-    typesetter.text("ACTUALIDAD  /  TECNOLOGÍA  /  PAÍS", margin, 98, 7.3, SANS, align="center", box_width=content_width)
+    topic_header = "  /  ".join(sorted({story["section"].upper() for story in edition["stories"]}, key=alphabetical_key))
+    topic_lines = typesetter.lines(topic_header, content_width, 7.3, SANS)
+    if len(topic_lines) > 2:
+        last_line = topic_lines[1]
+        while last_line and typesetter.width(last_line + "…") > content_width:
+            last_line = last_line[:-1]
+        topic_lines = [topic_lines[0], last_line + "…"]
+    for index, line in enumerate(topic_lines):
+        typesetter.text(line, margin, (98 if len(topic_lines) == 1 else 94) + index * 8, 7.3, SANS, align="center", box_width=content_width)
     typesetter.rule(margin, 116, content_width, 1.6, INK)
     typesetter.rule(margin, 120, content_width, 0.4, INK)
     typesetter.text(date, margin, 128, 8.1, SANS)

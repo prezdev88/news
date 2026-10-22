@@ -169,7 +169,7 @@ class NewsTests(unittest.TestCase):
         self.assertFalse(any("No se encontraron noticias de tecnología" in warning for warning in warnings))
 
     def test_national_filter_checks_host_section_and_article_date(self):
-        source = SOURCES[1]
+        source = next(item for item in SOURCES if item.name == "BioBioChile" and not item.section)
         self.assertTrue(is_national_article("https://www.biobiochile.cl/noticias/nacional/chile/2026/10/22/noticia.shtml", source))
         self.assertFalse(is_national_article("https://www.biobiochile.cl/noticias/internacional/2026/10/22/noticia.shtml", source))
         self.assertFalse(is_national_article("https://www.biobiochile.cl.evil.example/noticias/nacional/2026/10/22/noticia.shtml", source))
@@ -192,7 +192,7 @@ class NewsTests(unittest.TestCase):
         self.assertFalse(is_recent(result, NOW, 24))
 
     def test_listing_and_rss_exclude_international_articles(self):
-        source = SOURCES[0]
+        source = next(item for item in SOURCES if item.name == "Cooperativa")
         national = "https://www.cooperativa.cl/noticias/pais/educacion/noticia/2026-10-22/080000.html"
         international = national.replace("/pais/", "/mundo/")
         title = "Una noticia nacional con un titular suficientemente extenso"
@@ -211,7 +211,7 @@ class NewsTests(unittest.TestCase):
         self.assertTrue(any("No se encontraron noticias de tecnología" in warning for warning in warnings))
 
     def test_latin1_feed_keeps_spanish_characters(self):
-        source = SOURCES[0]
+        source = next(item for item in SOURCES if item.name == "Cooperativa")
         title = "Educación y participación: una noticia para las comunidades"
         xml = ('<?xml version="1.0" encoding="ISO-8859-1"?><rss version="2.0"><channel><item>'
                f'<title>{title}</title><link>https://www.cooperativa.cl/noticias/pais/educacion/2026-10-22/080000.html</link>'

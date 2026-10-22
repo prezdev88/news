@@ -10,24 +10,26 @@
   "max_output_tokens": 4096,
   "max_article_chars": 8000,
   "output_dir": "./output",
+  "topics": [
+    "Ciencia",
+    "Cultura",
+    "Deportes",
+    "Economía",
+    "Educación",
+    "Medioambiente",
+    "Nacionales",
+    "Política",
+    "Regiones",
+    "Salud",
+    "Seguridad",
+    "Sociedad",
+    "Tecnología"
+  ],
   "sources": [
-    {
-      "name": "Cooperativa",
-      "page_url": "https://www.cooperativa.cl/noticias/pais",
-      "article_prefix": "/noticias/pais/",
-      "feed_url": "https://www.cooperativa.cl/noticias/site/tax/port/all/rss_1___1.xml",
-      "enabled": true
-    },
     {
       "name": "BioBioChile",
       "page_url": "https://www.biobiochile.cl/lista/categorias/nacional",
       "article_prefix": "/noticias/nacional/",
-      "enabled": true
-    },
-    {
-      "name": "El Mostrador",
-      "page_url": "https://www.elmostrador.cl/noticias/pais/",
-      "article_prefix": "/noticias/pais/",
       "enabled": true
     },
     {
@@ -36,6 +38,19 @@
       "article_prefix": "/noticias/ciencia-y-tecnologia/pc-e-internet/",
       "section": "Tecnología",
       "require_chile": true,
+      "enabled": true
+    },
+    {
+      "name": "Cooperativa",
+      "page_url": "https://www.cooperativa.cl/noticias/pais",
+      "article_prefix": "/noticias/pais/",
+      "feed_url": "https://www.cooperativa.cl/noticias/site/tax/port/all/rss_1___1.xml",
+      "enabled": true
+    },
+    {
+      "name": "El Mostrador",
+      "page_url": "https://www.elmostrador.cl/noticias/pais/",
+      "article_prefix": "/noticias/pais/",
       "enabled": true
     },
     {

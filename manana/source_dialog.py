@@ -4,13 +4,18 @@ import tkinter as tk
 from dataclasses import replace
 from tkinter import messagebox, ttk
 
-from .config import AppError, SOURCES, Settings, custom_source
+from .config import AppError, DEFAULT_TOPICS, SOURCES, Settings, custom_source, source_sort_key, source_topic
+from .sorting import alphabetical_key
+from .topic_dialog import TopicsDialog
 
 
 class SourcesDialog(tk.Toplevel):
-    def __init__(self, parent, sources, on_save):
+    def __init__(self, parent, sources, on_save, *, topics=DEFAULT_TOPICS):
+        settings = Settings(sources=tuple(sources), topics=tuple(topics))
+        settings.validate()
         super().__init__(parent)
-        self.sources = list(sources)
+        self.sources = list(settings.sources)
+        self.topics = list(settings.topics)
         self.on_save = on_save
         self.title("Fuentes de noticias")
         self.transient(parent)
@@ -48,6 +53,7 @@ class SourcesDialog(tk.Toplevel):
         self.edit_button.pack(side="left", padx=(6, 0))
         self.delete_button = ttk.Button(actions, text="Eliminar", command=self.delete_source)
         self.delete_button.pack(side="left", padx=(6, 0))
+        ttk.Button(actions, text="Temas…", command=self.manage_topics).pack(side="right")
         ttk.Button(content, text="Restaurar fuentes iniciales", command=self.restore_defaults).pack(anchor="w", pady=(10, 0))
         footer = ttk.Frame(content)
         footer.pack(fill="x", pady=(16, 0))
@@ -61,11 +67,14 @@ class SourcesDialog(tk.Toplevel):
         return int(selection[0]) if selection else None
 
     def refresh(self, selected=None):
+        selected_url = self.sources[min(selected, len(self.sources) - 1)].url if selected is not None and self.sources else None
+        self.sources.sort(key=source_sort_key)
+        self.topics.sort(key=alphabetical_key)
         self.tree.delete(*self.tree.get_children())
         for index, source in enumerate(self.sources):
-            self.tree.insert("", "end", iid=str(index), values=("☑" if source.enabled else "☐", source.name, source.section or "Nacionales", source.url))
-        if selected is not None and self.sources:
-            item = str(min(selected, len(self.sources) - 1))
+            self.tree.insert("", "end", iid=str(index), values=("☑" if source.enabled else "☐", source.name, source_topic(source), source.url))
+        if selected_url is not None:
+            item = str(next(index for index, source in enumerate(self.sources) if source.url == selected_url))
             self.tree.selection_set(item)
             self.tree.focus(item)
             self.tree.see(item)
@@ -107,12 +116,27 @@ class SourcesDialog(tk.Toplevel):
                 self.sources.append(default)
             else:
                 self.sources[index] = default
+        settings = Settings(sources=tuple(self.sources), topics=tuple(self.topics))
+        settings.validate()
+        self.sources = list(settings.sources)
+        self.topics = list(settings.topics)
         self.refresh(0)
 
     def edit_selected(self):
         index = self.selected_index()
         if index is not None:
             self.edit_source(index)
+
+    def manage_topics(self):
+        settings = Settings(sources=tuple(self.sources), topics=tuple(self.topics))
+        settings.validate()
+
+        def apply(updated):
+            self.sources = list(updated.sources)
+            self.topics = list(updated.topics)
+            self.refresh()
+
+        TopicsDialog(self, settings, apply)
 
     def edit_source(self, index=None):
         previous = self.sources[index] if index is not None else None
@@ -125,16 +149,17 @@ class SourcesDialog(tk.Toplevel):
         content.pack(fill="both", expand=True)
         name = tk.StringVar(editor, value=previous.name if previous else "")
         url = tk.StringVar(editor, value=previous.url if previous else "")
-        section = tk.StringVar(editor, value="Tecnología" if previous and previous.section else "Nacionales")
+        default_topic = "Nacionales" if "Nacionales" in self.topics else self.topics[0]
+        section = tk.StringVar(editor, value=source_topic(previous) if previous else default_topic)
         ttk.Label(content, text="Nombre del medio").pack(anchor="w")
         name_entry = ttk.Entry(content, textvariable=name, width=57)
         name_entry.pack(fill="x", pady=(5, 12))
         ttk.Label(content, text="URL de sección o RSS/Atom").pack(anchor="w")
         ttk.Entry(content, textvariable=url).pack(fill="x", pady=(5, 12))
-        ttk.Label(content, text="Tema").pack(anchor="w")
-        ttk.Combobox(content, textvariable=section, values=("Nacionales", "Tecnología"), state="readonly").pack(fill="x", pady=(5, 12))
+        ttk.Label(content, text="Tema (elige o escribe uno nuevo)").pack(anchor="w")
+        ttk.Combobox(content, textvariable=section, values=self.topics).pack(fill="x", pady=(5, 12))
         ttk.Label(
-            content, text="Las fuentes nuevas se filtran por noticias recientes relacionadas con Chile. Usa páginas públicas con el texto de los artículos accesible.",
+            content, text="Usa una sección o RSS que publique el tema elegido. La app filtra las fuentes nuevas por fecha, texto accesible y relación con Chile.",
             style="Muted.TLabel", wraplength=460,
         ).pack(anchor="w", pady=(0, 16))
         buttons = ttk.Frame(content)
@@ -147,18 +172,21 @@ class SourcesDialog(tk.Toplevel):
 
         def accept():
             try:
-                source = custom_source(name.get(), url.get(), "Tecnología" if section.get() == "Tecnología" else "", previous)
+                source = custom_source(name.get(), url.get(), section.get(), previous)
                 draft = list(self.sources)
                 if index is None:
                     draft.append(source)
                 else:
                     draft[index] = source
-                Settings(sources=tuple(draft)).validate()
+                settings = Settings(sources=tuple(draft), topics=tuple(self.topics))
+                settings.validate()
             except AppError as exc:
                 messagebox.showerror("Revisa la fuente", str(exc), parent=editor)
                 return
-            self.sources = draft
-            self.refresh(index if index is not None else len(draft) - 1)
+            self.sources = list(settings.sources)
+            self.topics = list(settings.topics)
+            selected_index = next(index for index, item in enumerate(self.sources) if item.url == source.url)
+            self.refresh(selected_index)
             close_editor()
 
         ttk.Button(buttons, text="Cancelar", command=close_editor).pack(side="left")
@@ -169,11 +197,11 @@ class SourcesDialog(tk.Toplevel):
 
     def save(self):
         try:
-            settings = Settings(sources=tuple(self.sources))
+            settings = Settings(sources=tuple(self.sources), topics=tuple(self.topics))
             settings.validate()
             if not settings.active_sources:
                 raise AppError("Activa al menos una fuente para preparar tu periódico.")
-            self.on_save(settings.sources)
+            self.on_save(settings.sources, settings.topics)
         except (AppError, OSError) as exc:
             messagebox.showerror("Guardar fuentes", str(exc), parent=self)
             return

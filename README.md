@@ -22,12 +22,22 @@ En la vista previa, usa la **rueda del mouse** para acercar o alejar el periódi
 En **Tu edición**, pulsa **Fuentes**. El número del botón indica cuántas secciones están activas.
 
 1. Marca la columna **Usar** para activar o desactivar una fuente. También puedes seleccionar una fila y pulsar **Activar / desactivar** o la barra espaciadora.
-2. Pulsa **Añadir…**, escribe el nombre del medio, pega una **URL de sección o RSS/Atom** y elige **Nacionales** o **Tecnología**.
+2. Pulsa **Añadir…**, escribe el nombre del medio, pega una **URL de sección o RSS/Atom** y elige un tema o escribe uno nuevo.
 3. Pulsa **Guardar fuente** y luego **Guardar fuentes** para aplicar la selección.
 
 Puedes editar o eliminar entradas. **Restaurar fuentes iniciales** recupera y activa los medios incluidos, conservando las fuentes nuevas. **Cancelar** cierra el gestor sin aplicar sus cambios. Las preferencias se guardan en `config.json` y se usan tanto en la app como al generar desde la terminal.
 
 Las fuentes nuevas se filtran por relación con Chile, fecha y texto suficiente. Se admite que los artículos tengan URLs sin fecha, y que un RSS alojado en otro dominio enlace al sitio del medio. La lectura funciona con RSS/Atom y páginas que entregan el texto en su HTML o metadatos; un sitio que solo lo carga con JavaScript, exige iniciar sesión o bloquea las descargas puede requerir un lector específico. Las secciones de noticias nacionales y tecnología de un mismo medio se pueden activar por separado.
+
+## Crear y modificar temas
+
+En **Fuentes → Temas…** puedes **añadir, renombrar y eliminar** categorías. La lista inicial incluye Ciencia, Cultura, Deportes, Economía, Educación, Medioambiente, Nacionales, Política, Regiones, Salud, Seguridad, Sociedad y Tecnología. Los nombres admiten hasta 40 caracteres y se guardan en `config.json`.
+
+Renombrar un tema actualiza todas sus fuentes, incluidas las desactivadas. Para eliminar uno que tenga fuentes, elige primero otro tema en **Al eliminar, reasignar las fuentes a**. Pulsa **Guardar temas** y después **Guardar fuentes** para aplicar los cambios. Cancelar conserva la configuración anterior.
+
+También puedes crear un tema escribiéndolo directamente en el campo **Tema** al añadir o editar una fuente. Asigna cada tema a una sección o RSS que publique ese contenido. El modelo conserva las categorías asignadas; en las fuentes de **Nacionales** clasifica cada artículo entre los temas configurados. Las etiquetas y la cabecera del PDF reflejan los temas de las noticias incluidas.
+
+Las listas de fuentes, temas, modelos, impresoras y tamaños de papel se muestran de **A a Z**, considerando tildes y ñ. El orden se mantiene al añadir o renombrar entradas. Las cantidades y horas siguen un orden numérico ascendente, y las noticias del periódico se presentan por importancia editorial.
 
 ## Imprimir
 
@@ -110,7 +120,7 @@ Los resultados se guardan en `output/` con fecha y hora:
 
 - `.pdf`: periódico con texto seleccionable y enlaces a las fuentes.
 - `.png`: vista previa de la página.
-- `.json`: fuentes activas, artículos utilizados, textos descargados, resúmenes, modelo, cantidad solicitada e incluida y avisos de lectura. No contiene claves de API.
+- `.json`: temas configurados, fuentes activas, artículos utilizados, textos descargados, resúmenes, modelo, cantidad solicitada e incluida y avisos de lectura. No contiene claves de API.
 
 Se generan PDFs bajo demanda. La app no instala tareas programadas.
 
@@ -133,6 +143,8 @@ Las pruebas cubren filtros de país y fecha, extracción de artículos, errores 
 La vista previa se prueba con imágenes reales y un lienzo simulado: zoom bajo el puntero, límites de desplazamiento, vuelta a página completa, colores y agrupación de eventos antes de dibujar. La interacción usa cuadros rápidos y afina la imagen tras 150 ms sin movimiento. Estas pruebas no necesitan abrir una ventana.
 
 También se comprueba la compatibilidad con configuraciones anteriores, la persistencia de las fuentes elegidas, las fuentes desactivadas, los RSS/Atom externos, los artículos sin fecha en la URL y la conservación de los filtros de Chile, tecnología y actualidad al usar medios nuevos.
+
+Las pruebas de temas verifican persistencia, nombres duplicados, renombrado y reasignación de fuentes, categorías permitidas en la API del modelo, conservación de la cantidad de noticias y etiquetas largas en PDFs de una página.
 
 La prueba con noticias reales y tu modelo requiere ejecutar la app en un entorno con acceso al servidor local y a los medios. En el entorno de desarrollo restringido no fue posible alcanzar `localhost:1234` ni resolver los dominios de noticias.
 

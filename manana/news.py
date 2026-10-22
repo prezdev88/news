@@ -52,7 +52,7 @@ class Article:
 
 
 def is_technology_article(article: Article) -> bool:
-    return article.section == "Tecnología" or bool(TECHNOLOGY_TERMS.search(normalize(article.title)))
+    return article.section == "Tecnología" or bool(TECHNOLOGY_TERMS.search(normalize(article.title + " " + article.body[:2000])))
 
 
 def has_chilean_context(article: Article) -> bool:
@@ -287,7 +287,7 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
             articles.append(article)
             accepted += 1
             progress(f"  {source.name}: {accepted} noticias disponibles")
-            if accepted >= (min(4, settings.candidates_per_source) if source.section else settings.candidates_per_source):
+            if accepted >= (min(4, settings.candidates_per_source) if source.section == "Tecnología" else settings.candidates_per_source):
                 break
         if failures:
             warnings.append(f"{source.name}: {failures} notas descartadas por acceso, fecha o texto insuficiente.")

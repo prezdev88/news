@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .config import AppError, Settings
 from .lmstudio import LMStudio
-from .news import CHILE, Article, collect_news
+from .news import CHILE, Article, collect_news, is_technology_article
 from .newspaper import LayoutOverflowError, render_edition
 
 
@@ -67,9 +67,10 @@ def generate(settings: Settings, progress=print) -> Path:
         render_edition(edition, pdf_path, settings.paper)
     edition["paper"] = settings.paper
     edition["sources"] = [asdict(source) for source in settings.active_sources]
+    edition["topics"] = list(settings.topics)
     edition["candidate_count"] = len(articles)
     edition["printed_count"] = len(edition["stories"])
-    edition["technology_count"] = sum(story["section"] == "Tecnología" for story in edition["stories"])
+    edition["technology_count"] = sum(is_technology_article(story["article"]) or story["section"] == "Tecnología" for story in edition["stories"])
     pdf_path.with_suffix(".json").write_text(json.dumps(edition, ensure_ascii=False, indent=2, default=serialize) + "\n", encoding="utf-8")
     for warning in warnings:
         progress("Aviso: " + warning)

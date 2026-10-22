@@ -129,7 +129,7 @@ class NewspaperApp:
         options = ttk.Frame(left)
         options.pack(fill="x")
         for key, title, value, values in (
-            ("paper", "Papel", self.settings.paper, ("Carta", "A4")),
+            ("paper", "Papel", self.settings.paper, ("A4", "Carta")),
             ("article_count", "Noticias", str(self.settings.article_count), ("3", "4", "5", "6", "7")),
             ("lookback_hours", "Últimas horas", str(self.settings.lookback_hours), ("12", "24", "48", "72")),
         ):
@@ -172,14 +172,14 @@ class NewspaperApp:
         if self.busy:
             return
 
-        def apply(sources):
-            settings = replace(self.read_settings(), sources=sources)
+        def apply(sources, topics=None):
+            settings = replace(self.read_settings(), sources=sources, topics=topics if topics is not None else self.settings.topics)
             save_settings(settings)
             self.settings = settings
             self.sources_button.configure(text=f"Fuentes ({len(settings.active_sources)})…")
             self.status.set(f"Fuentes guardadas: {len(settings.active_sources)} secciones activas.")
 
-        SourcesDialog(self.root, self.settings.sources, apply)
+        SourcesDialog(self.root, self.settings.sources, apply, topics=self.settings.topics)
 
     def set_busy(self, value):
         self.busy = value
@@ -463,7 +463,7 @@ class NewspaperApp:
         ttk.Combobox(content, textvariable=printer, values=available.names, state="readonly", width=43).pack(fill="x")
         paper = tk.StringVar(value="Carta (Letter)" if self.fields["paper"].get() == "Carta" else "A4")
         ttk.Label(content, text="Papel").pack(anchor="w", pady=(13, 5))
-        ttk.Combobox(content, textvariable=paper, values=("Carta (Letter)", "A4"), state="readonly").pack(fill="x")
+        ttk.Combobox(content, textvariable=paper, values=("A4", "Carta (Letter)"), state="readonly").pack(fill="x")
         ttk.Label(content, text="Blanco y negro · Una cara · Una copia", style="Muted.TLabel").pack(anchor="w", pady=(14, 18))
         buttons = ttk.Frame(content)
         buttons.pack(fill="x")
