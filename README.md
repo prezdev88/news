@@ -1,0 +1,125 @@
+# La Mañana
+
+Genera al ejecutarla un periódico de noticias nacionales de Chile en **un PDF de una sola página**, con resúmenes escritos por el modelo que tengas en **LM Studio**. Incluye una app de escritorio y un comando directo.
+
+La edición reserva **al menos una noticia de Tecnología** cuando hay artículos recientes relacionados con Chile. Esa nota forma parte del total: si eliges siete, se incluyen siete en total, con tecnología entre ellas. Se buscan temas como inteligencia artificial, ciberseguridad, software, conectividad e innovación. Si no se encuentran artículos de tecnología en el período elegido, se indica en los avisos y se puede ampliar la ventana de noticias.
+
+## Ejecutar
+
+1. En LM Studio, carga tu modelo **Gemma 4 it / Instruct** y activa **Developer → Start Server**. La URL habitual es `http://localhost:1234/v1`.
+2. Abre la app desde esta carpeta:
+
+   ```bash
+   ./abrir-app.sh
+   ```
+
+3. Pulsa **Detectar**, elige tu modelo y haz clic en **Generar mi periódico**. El papel predeterminado es **Carta (Letter)**; también puedes elegir A4, el período de noticias y la carpeta de salida.
+
+## Imprimir
+
+Pulsa **Imprimir PDF…**, selecciona la impresora y confirma con **Imprimir en negro**. Se envía **una copia, por una cara, en Carta (Letter) y blanco y negro** con los valores predeterminados. El diálogo permite cambiar a A4. La app recuerda la impresora elegida y recupera la última edición guardada al abrirse, por lo que puedes imprimirla sin volver a consultar noticias ni usar el modelo.
+
+La impresión utiliza CUPS y sus herramientas `lp`, `lpstat` y `lpoptions`. La app solicita el modo monocromo y, cuando el controlador anuncia una opción de escala de grises, también la aplica. Cada trabajo incluye una sola página, sin portada adicional, y se ajusta al área imprimible. La confirmación muestra que el trabajo se envió a la cola de CUPS y su identificador; el estado físico depende de la impresora.
+
+Para imprimir desde la terminal:
+
+```bash
+./generar.sh --printers
+./generar.sh --print-file output/tu-edicion.pdf --printer NOMBRE_IMPRESORA
+```
+
+Para generar e imprimir una edición en la misma ejecución:
+
+```bash
+./generar.sh --print --no-open
+```
+
+La impresión ocurre al pulsar el botón correspondiente o al indicar `--print` / `--print-file`. El PDF usa texto negro y grises neutros.
+
+Para generar directamente desde la terminal y abrir el PDF:
+
+```bash
+./generar.sh
+```
+
+Se usa automáticamente el único modelo Gemma disponible, o el único modelo de texto si no hay Gemma. Si hay varios, elige uno en la app o indica su identificador:
+
+```bash
+./generar.sh --models
+./generar.sh --model 'identificador-que-muestra-lm-studio'
+```
+
+La interfaz guarda las preferencias en `config.json`. También puedes copiar `config.example.json` a `config.json` y editarlo. Los argumentos del comando tienen prioridad para esa ejecución:
+
+```bash
+./generar.sh --paper Carta --count 5 --hours 48 --no-open
+./generar.sh --base-url http://localhost:1234/v1 --output-dir ./output
+```
+
+## Requisitos
+
+- Python 3.11 o posterior, Tkinter, Cairo y las dependencias de `requirements.txt`.
+- LM Studio con su servidor activo y un modelo de texto cargado.
+- Internet para descargar los medios. La inferencia se realiza en el servidor de LM Studio configurado.
+
+Las dependencias ya estaban disponibles en el equipo donde se preparó esta app. Si el lanzador indica que faltan, usa un entorno virtual:
+
+```bash
+./instalar.sh
+```
+
+Tkinter pertenece a la instalación de Python. La instalación de `pycairo` puede requerir las bibliotecas de desarrollo de Cairo y `pkg-config`; consulta su [guía oficial](https://pycairo.readthedocs.io/en/latest/getting_started.html). El script no instala paquetes del sistema ni pide privilegios administrativos.
+
+Si activaste autenticación en el servidor de LM Studio, configura `LMSTUDIO_API_KEY` en tu entorno. No hace falta una clave de OpenAI ni se utiliza su servicio.
+
+## Gemma y los resúmenes
+
+Gemma 4 puede procesar texto y seguir instrucciones. Usa una variante **it / Instruct**; el tamaño y la cuantización adecuados dependen de la memoria de tu equipo. La app funciona con los modelos de texto que exponga el servidor y no descarga modelos.
+
+Para comenzar, configura en LM Studio un contexto de **16K tokens**, si tu memoria lo permite. La app solicita respuestas sin Thinking mediante `reasoning_effort: "none"`. Si tu versión del servidor rechaza ese parámetro, usa la preferencia de LM Studio: desactiva **Enable Thinking** en los ajustes del modelo. La efectividad del control por API depende del modelo y del runtime; la app no modifica sus ajustes globales.
+
+Cada petición dispone inicialmente de **4096 tokens de salida**, configurables con `max_output_tokens` en `config.json` o con `--max-output-tokens`. Si el servidor corta una respuesta sin completar el JSON, se reintenta una vez con el doble de presupuesto, hasta **8192 tokens**. Un JSON completo sigue pasando las comprobaciones habituales. Si vuelve a agotarse la salida, el error muestra el presupuesto y los tokens de razonamiento cuando el servidor los informa. No se repiten indefinidamente las peticiones truncadas.
+
+Cada artículo se resume por separado. Si recibes errores de contexto, reduce `candidates_per_source` o `max_article_chars`. Los parámetros de muestreo siguen la configuración documentada para Gemma 4: temperatura 1.0, top-p 0.95 y top-k 64.
+
+## Preparación de la edición
+
+1. Consulta el RSS nacional de Cooperativa y las portadas nacionales de BioBioChile y El Mostrador. Si falla el RSS, intenta la portada de Cooperativa. También consulta [PC e Internet de BioBioChile](https://www.biobiochile.cl/lista/categorias/pc-e-internet) y [Agenda Innovación de El Mostrador](https://www.elmostrador.cl/agenda-pais/agenda-innovacion/).
+2. Acepta artículos con fecha dentro del período solicitado y al menos 80 palabras de texto accesible. En las fuentes de tecnología exige además señales de relación con Chile en el artículo y vocabulario tecnológico. Descarta textos insuficientes, notas antiguas y duplicados de título. No se eluden bloqueos ni suscripciones.
+3. Envía al modelo hasta ocho candidatos por portada nacional y cuatro por sección tecnológica, con titular y extracto, para seleccionar exactamente la cantidad elegida. Pide variedad y un solo artículo por acontecimiento. Cuando hay candidatos de tecnología, garantiza al menos uno dentro del total, aunque el modelo ignore la instrucción de reservarlo. Si el modelo devuelve una cantidad distinta, se le pide corregirla. Si no hay suficientes artículos utilizables, la app lo indica y pide ampliar el período o elegir menos noticias. Es una selección editorial automatizada, no un ranking objetivo de todas las noticias del país.
+4. Resume cada artículo seleccionado. El modelo recibe hasta 8.000 caracteres por nota, instrucciones para conservar atribuciones e incertidumbres y un esquema JSON. Las extensiones pedidas son objetivos editoriales: se acepta un resumen sustancial algo más breve y un pequeño margen adicional en palabras y titular. Se comprueba la estructura y que las cifras escritas con dígitos aparezcan en el texto suministrado. Si hace falta corregir algo, se envía el borrador real con sus medidas y el motivo del rechazo; si vuelve a fallar, la generación se detiene. No se rellenan los textos ni se recortan frases automáticamente para alcanzar una cifra exacta de palabras.
+5. Mide la maqueta completa antes de exportar. Ajusta cabecera, columnas y espaciados para incluir todas las noticias, con texto principal de al menos 9,8 puntos. Para seis o siete noticias pide resúmenes más breves desde el principio. Si aún no caben, vuelve a resumir todas las notas con una extensión menor; nunca elimina noticias por espacio. Si tampoco cabe esa edición, muestra un error en lugar de guardar una cantidad diferente de la elegida. Se pueden elegir entre tres y siete noticias, en A4 o Carta.
+
+Las comprobaciones de cifras y formato no garantizan fidelidad factual completa. Cada nota incluye su medio, fecha y enlace para contrastarla. Se pide al modelo trabajar únicamente con los artículos descargados; no se le pide recordar noticias actuales.
+
+Los resultados se guardan en `output/` con fecha y hora:
+
+- `.pdf`: periódico con texto seleccionable y enlaces a las fuentes.
+- `.png`: vista previa de la página.
+- `.json`: artículos utilizados, textos descargados, resúmenes, modelo, cantidad solicitada e incluida y avisos de lectura. No contiene claves de API.
+
+Se generan PDFs bajo demanda. La app no instala tareas programadas.
+
+## Ver el diseño sin conectar LM Studio
+
+```bash
+./generar.sh --demo
+```
+
+Genera `output/ejemplo.pdf`, claramente marcado como **maqueta** y con textos explicativos en lugar de noticias reales.
+
+## Validación
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Las pruebas cubren filtros de país y fecha, extracción de artículos, errores de la API local, respuestas JSON inválidas, cifras añadidas y el flujo completo de generación con fuentes y respuestas de modelo simuladas. Se verifican las opciones de impresión Carta, blanco y negro, una copia y ausencia de portadas con CUPS simulado; las pruebas no envían trabajos reales. También se comprueba el PDF con `pdfinfo` y `qpdf` cuando están disponibles. Las pruebas no requieren LM Studio ni acceso a internet.
+
+La prueba con noticias reales y tu modelo requiere ejecutar la app en un entorno con acceso al servidor local y a los medios. En el entorno de desarrollo restringido no fue posible alcanzar `localhost:1234` ni resolver los dominios de noticias.
+
+## Referencias
+
+- [Gemma 4: ficha oficial y configuración](https://ai.google.dev/gemma/docs/core/model_card_4)
+- [API compatible de LM Studio](https://lmstudio.ai/docs/developer/openai-compat)
+- [JSON estructurado en LM Studio](https://lmstudio.ai/docs/developer/openai-compat/structured-output)

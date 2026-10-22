@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+config.json
+output/*
+!output/ejemplo.pdf
+!output/ejemplo.png

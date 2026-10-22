@@ -1,0 +1,13 @@
+{
+  "base_url": "http://localhost:1234/v1",
+  "model": "",
+  "paper": "Carta",
+  "printer": "",
+  "article_count": 7,
+  "lookback_hours": 24,
+  "candidates_per_source": 8,
+  "timeout_seconds": 240,
+  "max_output_tokens": 4096,
+  "max_article_chars": 8000,
+  "output_dir": "./output"
+}
