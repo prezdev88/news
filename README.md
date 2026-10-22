@@ -15,6 +15,8 @@ La edición reserva **al menos una noticia de Tecnología** cuando hay artículo
 
 3. Pulsa **Detectar**, elige tu modelo y haz clic en **Generar mi periódico**. El papel predeterminado es **Carta (Letter)**; también puedes elegir A4, el período de noticias y la carpeta de salida.
 
+En la vista previa, usa la **rueda del mouse** para acercar o alejar el periódico, centrando el zoom donde está el puntero. Mantén pulsado el botón izquierdo y **arrastra** para recorrer la hoja ampliada. Pulsa **Ajustar página** o haz **doble clic** para volver a ver la página completa.
+
 ## Imprimir
 
 Pulsa **Imprimir PDF…**, selecciona la impresora y confirma con **Imprimir en negro**. Se envía **una copia, por una cara, en Carta (Letter) y blanco y negro** con los valores predeterminados. El diálogo permite cambiar a A4. La app recuerda la impresora elegida y recupera la última edición guardada al abrirse, por lo que puedes imprimirla sin volver a consultar noticias ni usar el modelo.
@@ -115,6 +117,8 @@ python3 -m unittest discover -s tests -v
 ```
 
 Las pruebas cubren filtros de país y fecha, extracción de artículos, errores de la API local, respuestas JSON inválidas, cifras añadidas y el flujo completo de generación con fuentes y respuestas de modelo simuladas. Se verifican las opciones de impresión Carta, blanco y negro, una copia y ausencia de portadas con CUPS simulado; las pruebas no envían trabajos reales. También se comprueba el PDF con `pdfinfo` y `qpdf` cuando están disponibles. Las pruebas no requieren LM Studio ni acceso a internet.
+
+La vista previa se prueba con imágenes reales y un lienzo simulado: zoom bajo el puntero, límites de desplazamiento, vuelta a página completa, colores y agrupación de eventos antes de dibujar. La interacción usa cuadros rápidos y afina la imagen tras 150 ms sin movimiento. Estas pruebas no necesitan abrir una ventana.
 
 La prueba con noticias reales y tu modelo requiere ejecutar la app en un entorno con acceso al servidor local y a los medios. En el entorno de desarrollo restringido no fue posible alcanzar `localhost:1234` ni resolver los dominios de noticias.
 
