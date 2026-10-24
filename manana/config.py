@@ -171,6 +171,8 @@ class Settings:
     print_after_generation: bool = False
     save_preview: bool = True
     save_metadata: bool = True
+    cache_summaries: bool = False
+    summary_cache_file: str = ".cache/summaries.json"
     output_dir: str = str(ROOT / "output")
     sources: tuple[Source, ...] = SOURCES
     topics: tuple[str, ...] = DEFAULT_TOPICS
@@ -229,7 +231,7 @@ class Settings:
             raise AppError("think debe ser true, false o un nivel admitido por el modelo.")
         if type(self.keep_alive) is not int and (not isinstance(self.keep_alive, str) or not self.keep_alive.strip()):
             raise AppError("keep_alive debe ser una duración como 5m o un entero en segundos.")
-        for name in ("auto_pull_model", "structured_output", "compact_summaries", "open_pdf_after_generation", "print_after_generation", "save_preview", "save_metadata"):
+        for name in ("auto_pull_model", "structured_output", "compact_summaries", "open_pdf_after_generation", "print_after_generation", "save_preview", "save_metadata", "cache_summaries"):
             if type(getattr(self, name)) is not bool:
                 raise AppError(f"{name} debe ser true o false.")
         if not isinstance(self.summary_lengths, dict) or set(self.summary_lengths) != {"compact", "standard", "expanded"}:
@@ -243,7 +245,7 @@ class Settings:
                     raise AppError(f"summary_lengths.{profile}.{name} debe ser [mínimo, máximo], entre 1 y 200 palabras.")
             if type(limits["headline_chars"]) is not int or not 12 <= limits["headline_chars"] <= 150:
                 raise AppError(f"summary_lengths.{profile}.headline_chars debe estar entre 12 y 150.")
-        for name in ("system_prompt", "user_agent", "accept_language", "output_dir"):
+        for name in ("system_prompt", "user_agent", "accept_language", "output_dir", "summary_cache_file"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
                 raise AppError(f"{name} debe contener texto.")
         for name in ("connect_timeout_seconds", "download_timeout_seconds", "max_download_bytes", "technology_candidates_per_source"):

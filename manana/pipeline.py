@@ -12,6 +12,7 @@ from .config import AppError, Settings
 from .ollama import create_model_client
 from .news import CHILE, Article, collect_news, is_technology_article
 from .newspaper import LayoutOverflowError, render_edition
+from .summary_cache import SummaryCache
 
 
 def serialize(value):
@@ -26,6 +27,11 @@ def generate(settings: Settings, progress=print) -> Path:
     settings.validate()
     if not settings.active_sources:
         raise AppError("Activa al menos una fuente en «Fuentes de noticias».")
+    with SummaryCache(settings, progress) as cache:
+        return _generate(settings, progress, cache)
+
+
+def _generate(settings, progress, cache):
     progress(f"Conectando con {settings.provider}…")
     client = create_model_client(settings, progress=progress)
     model = client.select_model()
@@ -39,10 +45,21 @@ def generate(settings: Settings, progress=print) -> Path:
         )
     progress(f"Seleccionando las principales noticias entre {len(articles)} artículos…")
     selected = client.select_articles(articles, settings.article_count)
+
+    def summarize(article, section, *, lead, compact):
+        key = cache.key(article, section, lead=lead, compact=compact)
+        saved = cache.get(key)
+        if saved is not None:
+            progress(f"Reutilizando resumen guardado: {article.title}")
+            return saved
+        summary = client.summarize(article, section, lead=lead, compact=compact)
+        cache.save(key, summary)
+        return summary
+
     stories = []
     for index, (article, section) in enumerate(selected):
         progress(f"Resumiendo {index + 1}/{len(selected)}: {article.title}")
-        summary = client.summarize(article, section, lead=index == 0, compact=settings.compact_summaries)
+        summary = summarize(article, section, lead=index == 0, compact=settings.compact_summaries)
         stories.append({**summary, "article": article})
     created = datetime.now(CHILE)
     edition = {
@@ -63,10 +80,11 @@ def generate(settings: Settings, progress=print) -> Path:
         compact_stories = []
         for index, (article, section) in enumerate(selected):
             progress(f"Ajustando extensión {index + 1}/{len(selected)}: {article.title}")
-            summary = client.summarize(article, section, lead=index == 0, compact=True)
+            summary = summarize(article, section, lead=index == 0, compact=True)
             compact_stories.append({**summary, "article": article})
         edition["stories"] = compact_stories
         render_edition(edition, pdf_path, settings.paper, preview=settings.save_preview)
+    cache.clear()
     edition["paper"] = settings.paper
     edition["sources"] = [asdict(source) for source in settings.active_sources]
     edition["topics"] = list(settings.topics)

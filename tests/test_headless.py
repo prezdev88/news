@@ -59,8 +59,9 @@ class HeadlessGenerationTests(unittest.TestCase):
             self.assertEqual(output.getvalue().splitlines()[-1], "Tiempo total de ejecución: 01:01:33 (hh:mm:ss)")
             viewer.assert_not_called()
             printer.assert_not_called()
-            files = list((Path(directory) / "output").iterdir())
+            files = [path for path in (Path(directory) / "output").iterdir() if path.is_file()]
             self.assertEqual(len(files), 1)
+            self.assertFalse((Path(directory) / "output/.cache/summaries.json").exists())
             pdf = files[0]
             self.assertEqual(pdf.suffix, ".pdf")
             self.assertTrue(pdf.read_bytes().startswith(b"%PDF-"))
@@ -141,7 +142,8 @@ class HeadlessGenerationTests(unittest.TestCase):
                     patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])):
                 pdf = generate(settings, messages.append)
             self.assertTrue(pdf.read_bytes().startswith(b"%PDF-"))
-            self.assertEqual(list(Path(directory).iterdir()), [pdf])
+            self.assertEqual(list(Path(directory).glob("*.pdf")), [pdf])
+            self.assertFalse((Path(directory) / settings.summary_cache_file).exists())
             self.assertEqual(session.summaries, 7)
             self.assertEqual(len([call for call in session.calls if call[0] == "POST"]), 9)
             self.assertTrue(any("43 palabras" in message for message in messages))
@@ -165,6 +167,8 @@ class HeadlessGenerationTests(unittest.TestCase):
             {"model_options": {"temperature": float("nan")}},
             {"base_url": "http://ollama:11434/v1"},
             {"think": 0},
+            {"cache_summaries": "true"},
+            {"summary_cache_file": ""},
             {"print_after_generation": "false"},
             {"download_timeout_seconds": 0},
             {"summary_lengths": {}},
@@ -316,6 +320,37 @@ class OllamaTests(unittest.TestCase):
             native_response({"summary": invalid}),
         ])
         with self.assertRaisesRegex(AppError, "987"):
+            Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
+
+    def test_rejected_numeric_claim_is_corrected_without_digits_in_the_schema(self):
+        article = fixture_articles(1)[0]
+        headline = "Comunidades participan en una consulta regional"
+        valid_summary = " ".join(BODY.split()[:30]) + "."
+        invalid_summary = "La autoridad confirmó 987 casos " + " ".join(["antecedentes"] * 25) + "."
+        session = FakeModelSession([
+            native_response({"headline": headline, "summary": invalid_summary}),
+            native_response({"headline": headline, "summary": valid_summary}),
+        ])
+        result = Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
+        self.assertEqual(result["summary"], valid_summary)
+        initial_prompt = session.calls[0][2]["json"]["messages"][-1]["content"]
+        self.assertIn("CIFRAS EN DÍGITOS PRESENTES EN LA FUENTE", initial_prompt)
+        correction = session.calls[1][2]["json"]
+        self.assertIn("sin cantidades", correction["messages"][-1]["content"])
+        self.assertIn("No sustituyas", correction["messages"][-1]["content"])
+        properties = correction["format"]["properties"]
+        self.assertIsNotNone(re.fullmatch(properties["summary"]["pattern"], valid_summary))
+        self.assertIsNone(re.fullmatch(properties["summary"]["pattern"], invalid_summary))
+        self.assertIsNone(re.fullmatch(properties["headline"]["pattern"], headline + " 987"))
+
+    def test_numeric_correction_is_validated_when_server_ignores_the_no_digits_schema(self):
+        article = replace(fixture_articles(1)[0], body=BODY + " La consulta contó con 13 comunidades.")
+        headline = "Comunidades participan en una consulta regional"
+        session = FakeModelSession([
+            native_response({"headline": headline, "summary": "La autoridad confirmó 987 casos " + " ".join(["antecedentes"] * 25) + "."}),
+            native_response({"headline": headline, "summary": "La autoridad confirmó 13 casos " + " ".join(["antecedentes"] * 25) + "."}),
+        ])
+        with self.assertRaisesRegex(AppError, "sin cantidades"):
             Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
 
     def test_custom_lengths_control_the_prompt_and_the_schema(self):

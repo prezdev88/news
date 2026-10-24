@@ -38,6 +38,8 @@
   "print_after_generation": false,
   "save_preview": false,
   "save_metadata": false,
+  "cache_summaries": true,
+  "summary_cache_file": ".cache/summaries.json",
   "output_dir": "./output",
   "sources": [
     {

@@ -22,7 +22,11 @@ El script también se puede invocar mediante su ruta absoluta desde otra carpeta
 
 Al finalizar correctamente, Python muestra `Tiempo total de ejecución: 00:12:34 (hh:mm:ss)`. El tiempo incluye la lectura de configuración, la descarga del modelo si hace falta, la consulta de noticias, los resúmenes y la generación del PDF. Se mide desde el inicio de la aplicación Python; la preparación de Docker queda fuera de esa medición.
 
-La configuración inicial **no abre ventanas ni visores, no imprime, no guarda PNG ni JSON auxiliares y no instala cron**. Si no hay siete noticias válidas, o no se puede completar una edición fiel al formato, el programa informa el error y no publica una edición con menos noticias.
+La configuración inicial **no abre ventanas ni visores, no imprime, no guarda PNG ni JSON de auditoría y no instala cron**. Si no hay siete noticias válidas, o no se puede completar una edición fiel al formato, el programa informa el error y no publica una edición con menos noticias.
+
+Mientras el PDF esté pendiente, cada resumen validado se guarda inmediatamente en `output/.cache/summaries.json`. Si falla una noticia, se cancela el proceso o se reinicia el contenedor, vuelve a ejecutar `./generar.sh`: se consultan las fuentes y se seleccionan las noticias nuevamente, pero se reutilizan los resúmenes cuyo artículo, sección, posición de noticia principal, modelo y parámetros editoriales sigan coincidiendo. Los cambios en el texto, modelo o preferencias de generación requieren un resumen nuevo. Los borradores rechazados no se guardan.
+
+**Cuando el PDF se genera correctamente, se elimina el archivo de resúmenes temporales completo.** La siguiente edición empieza con resúmenes nuevos. Si la maquetación falla, se conserva el avance. La escritura del avance es atómica y queda en la carpeta montada del Dell; el archivo `.lock` que permanece vacío evita que dos ejecuciones modifiquen el mismo avance simultáneamente. Si el borrado falla por permisos u otro error del disco, se informa por consola.
 
 ## Configuración de la alfa
 
@@ -61,6 +65,8 @@ Los campos principales son:
 | `open_pdf_after_generation` | `false` |
 | `print_after_generation`, `printer` | Impresión desactivada. Se conserva el nombre de impresora; la conexión de CUPS desde Docker queda para una futura versión |
 | `save_preview`, `save_metadata` | `false`; puedes activar PNG y JSON auxiliares para revisar resultados |
+| `cache_summaries` | `true` en la alfa: guarda el avance durante la generación y lo elimina al crear el PDF. `false` desactiva tanto la lectura como la escritura de esos resúmenes |
+| `summary_cache_file` | `.cache/summaries.json`, relativo a `output_dir`. Debe quedar dentro de `output/` para conservarse entre contenedores Docker |
 | `sources` | Fuentes completas: nombre, URL de portada, RSS, ruta de artículos, tema y filtros |
 | `topics` | Catálogo editable de temas |
 
@@ -69,6 +75,8 @@ Los campos principales son:
 Con `structured_output: true`, el primer pedido ya incluye restricciones para las palabras del resumen y los caracteres del titular en el esquema JSON enviado al modelo. El perfil compacto pide 45–60 palabras para la noticia principal, 25–35 para las demás y titulares de hasta 65 caracteres. Se cuenta cada palabra separada por espacios; las citas usan comillas tipográficas y el párrafo debe terminar con puntuación. Cambia esas extensiones en `summary_lengths`, sin tocar el código. `max_output_tokens` limita tokens del modelo y no equivale a una cantidad de palabras.
 
 Si un servidor ignora las restricciones y devuelve un resumen demasiado largo, la corrección pide únicamente acortar ese borrador y mantiene el titular ya validado. No vuelve a enviar el artículo completo para esa corrección. Se siguen comprobando las cifras contra el texto original y el espacio real de la página; no se recortan palabras ni se eliminan noticias para producir el PDF. Las respuestas de runtimes sin esquema estructurado conservan un margen editorial de compatibilidad y un reintento acotado.
+
+El primer pedido también enumera las cifras presentes en el texto enviado y exige conservar su escritura, sin cálculos ni conversiones de palabras a dígitos. Si aparece una cifra ausente, el reintento pide reescribir el titular y el resumen de forma cualitativa, sin cantidades ni fechas numéricas; el esquema impide generar dígitos. Se conserva la validación local para los servidores que ignoren el esquema. Si la corrección falla, el proceso informa el error y conserva los resúmenes anteriores para reintentar.
 
 En cada fuente puedes modificar `name`, `page_url`, `article_prefix`, `feed_url`, `section`, `require_chile`, `enabled`, `require_date_in_url` y `allow_external_feed_articles`. Para una fuente nueva con URLs sin fecha, usa `require_date_in_url: false`; para un RSS que enlace a otros dominios, `allow_external_feed_articles: true`. `enabled: false` la conserva sin consultarla. Una sección vacía usa el tema Nacionales. Se mantienen los filtros de fecha y texto suficiente.
 
