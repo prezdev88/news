@@ -52,8 +52,11 @@ class HeadlessGenerationTests(unittest.TestCase):
                     patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), \
                     patch("manana.__main__.open_pdf") as viewer, \
                     patch("manana.__main__.print_pdf") as printer, \
-                    patch("sys.stdout", new_callable=io.StringIO):
+                    patch("manana.__main__.perf_counter", side_effect=[100.0, 3793.9]), \
+                    patch("sys.stdout", new_callable=io.StringIO) as output:
                 self.assertEqual(main(), 0)
+            self.assertIn("PDF listo:", output.getvalue())
+            self.assertEqual(output.getvalue().splitlines()[-1], "Tiempo total de ejecución: 01:01:33 (hh:mm:ss)")
             viewer.assert_not_called()
             printer.assert_not_called()
             files = list((Path(directory) / "output").iterdir())

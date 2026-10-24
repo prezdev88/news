@@ -20,6 +20,8 @@ El script también se puede invocar mediante su ruta absoluta desde otra carpeta
 4. Descarga las noticias, selecciona **7** de las últimas **24 horas** y genera **un PDF de una página Carta** en `output/`.
 5. El contenedor de News termina y devuelve un código de salida: `0` si terminó correctamente o un valor distinto si falló. Ollama permanece disponible y libera el modelo de RAM según `keep_alive`.
 
+Al finalizar correctamente, Python muestra `Tiempo total de ejecución: 00:12:34 (hh:mm:ss)`. El tiempo incluye la lectura de configuración, la descarga del modelo si hace falta, la consulta de noticias, los resúmenes y la generación del PDF. Se mide desde el inicio de la aplicación Python; la preparación de Docker queda fuera de esa medición.
+
 La configuración inicial **no abre ventanas ni visores, no imprime, no guarda PNG ni JSON auxiliares y no instala cron**. Si no hay siete noticias válidas, o no se puede completar una edición fiel al formato, el programa informa el error y no publica una edición con menos noticias.
 
 ## Configuración de la alfa

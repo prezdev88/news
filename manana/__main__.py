@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
+from time import perf_counter
 
 from .config import AppError, CONFIG_PATH, load_settings
 from .ollama import create_model_client
@@ -14,6 +15,7 @@ from .printing import list_printers, print_pdf
 
 
 def main():
+    started_at = perf_counter()
     parser = argparse.ArgumentParser(description="Genera un periódico de Chile de una página usando config.json, sin GUI por defecto.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--gui", action="store_true", help="Abrir la aplicación de escritorio")
@@ -75,6 +77,10 @@ def main():
             print(print_pdf(path, printer=settings.printer, paper=settings.paper).message)
         if settings.open_pdf_after_generation:
             open_pdf(path)
+        elapsed_seconds = int(perf_counter() - started_at)
+        hours, remainder = divmod(elapsed_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        print(f"Tiempo total de ejecución: {hours:02d}:{minutes:02d}:{seconds:02d} (hh:mm:ss)", flush=True)
         return 0
     except (AppError, OSError) as exc:
         print(f"\n{exc}", file=sys.stderr)
