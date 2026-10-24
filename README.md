@@ -53,6 +53,7 @@ Los campos principales son:
 | `user_agent`, `accept_language` | Cabeceras usadas al consultar los medios |
 | `max_output_tokens`, `max_retry_output_tokens` | `1024` inicialmente y hasta `2048` en un reintento si se trunca el JSON. No dupliques estos límites en `model_options.num_predict` |
 | `max_article_chars` | `8000`: texto máximo de cada artículo enviado al modelo |
+| `compact_summaries` | `true`: pide resúmenes breves desde el principio para siete noticias en Carta y evita una segunda ronda completa por falta de espacio. Puedes usar `false` para solicitar textos más extensos con el ajuste posterior habitual |
 | `output_dir` | `./output`; también puedes elegir una subcarpeta, como `./output/diario`, dentro del directorio montado |
 | `open_pdf_after_generation` | `false` |
 | `print_after_generation`, `printer` | Impresión desactivada. Se conserva el nombre de impresora; la conexión de CUPS desde Docker queda para una futura versión |

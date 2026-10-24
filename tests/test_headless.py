@@ -13,6 +13,8 @@ from unittest.mock import patch
 from manana.__main__ import main
 from manana.config import AppError, ROOT, Settings, load_settings, save_settings
 from manana.ollama import Ollama
+from manana.newspaper import LayoutOverflowError
+from manana.pipeline import generate
 from test_app import FakeModelSession, FakeResponse, SUMMARY, fixture_articles
 
 
@@ -62,6 +64,8 @@ class HeadlessGenerationTests(unittest.TestCase):
             self.assertTrue(all(call[1] == "http://ollama:11434/api/chat" for call in session.calls[1:]))
             self.assertTrue(all(payload["think"] is False for payload in payloads))
             self.assertTrue(all(payload["options"]["num_ctx"] == 16384 for payload in payloads))
+            self.assertIn("entre 45 y 60 palabras", payloads[1]["messages"][-1]["content"])
+            self.assertIn("entre 25 y 35 palabras", payloads[2]["messages"][-1]["content"])
             self.assertEqual(payloads[0]["format"]["properties"]["selected"]["minItems"], 7)
             if shutil.which("pdfinfo"):
                 info = subprocess.run(["pdfinfo", str(pdf)], check=True, capture_output=True, text=True).stdout
@@ -87,6 +91,22 @@ class HeadlessGenerationTests(unittest.TestCase):
             self.assertEqual(second.topics, first.topics)
             self.assertEqual(second.model_options["temperature"], 0.1)
             self.assertFalse(second.print_after_generation)
+
+    def test_compact_edition_does_not_repeat_all_requests_if_it_still_overflows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Settings(
+                provider="ollama", base_url="http://ollama:11434", model="qwen3:4b",
+                output_dir=directory, compact_summaries=True,
+            )
+            session = FakeOllamaSession()
+            client = lambda current, **kwargs: Ollama(current, session=session, **kwargs)
+            with patch("manana.pipeline.create_model_client", side_effect=client), \
+                    patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), \
+                    patch("manana.pipeline.render_edition", side_effect=LayoutOverflowError("No caben las siete noticias")), \
+                    self.assertRaisesRegex(LayoutOverflowError, "siete noticias"):
+                generate(settings, lambda _: None)
+            self.assertEqual(len([call for call in session.calls if call[0] == "POST"]), 8)
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_check_config_needs_neither_display_nor_model_server(self):
         with patch("sys.argv", ["manana", "--config", str(ROOT / "config.example.json"), "--check-config"]), \

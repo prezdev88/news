@@ -110,5 +110,6 @@
     "Seguridad",
     "Sociedad",
     "Tecnología"
-  ]
+  ],
+  "compact_summaries": true
 }

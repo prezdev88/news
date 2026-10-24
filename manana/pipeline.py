@@ -42,7 +42,7 @@ def generate(settings: Settings, progress=print) -> Path:
     stories = []
     for index, (article, section) in enumerate(selected):
         progress(f"Resumiendo {index + 1}/{len(selected)}: {article.title}")
-        summary = client.summarize(article, section, lead=index == 0)
+        summary = client.summarize(article, section, lead=index == 0, compact=settings.compact_summaries)
         stories.append({**summary, "article": article})
     created = datetime.now(CHILE)
     edition = {
@@ -57,6 +57,8 @@ def generate(settings: Settings, progress=print) -> Path:
     try:
         render_edition(edition, pdf_path, settings.paper, preview=settings.save_preview)
     except LayoutOverflowError:
+        if settings.compact_summaries:
+            raise
         progress(f"Preparando resúmenes más breves para conservar las {settings.article_count} noticias en una página…")
         compact_stories = []
         for index, (article, section) in enumerate(selected):

@@ -161,6 +161,7 @@ class Settings:
     max_output_tokens: int = 4096
     max_retry_output_tokens: int = 8192
     max_article_chars: int = 8000
+    compact_summaries: bool = False
     open_pdf_after_generation: bool = False
     print_after_generation: bool = False
     save_preview: bool = True
@@ -223,7 +224,7 @@ class Settings:
             raise AppError("think debe ser true, false o un nivel admitido por el modelo.")
         if type(self.keep_alive) is not int and (not isinstance(self.keep_alive, str) or not self.keep_alive.strip()):
             raise AppError("keep_alive debe ser una duración como 5m o un entero en segundos.")
-        for name in ("auto_pull_model", "structured_output", "open_pdf_after_generation", "print_after_generation", "save_preview", "save_metadata"):
+        for name in ("auto_pull_model", "structured_output", "compact_summaries", "open_pdf_after_generation", "print_after_generation", "save_preview", "save_metadata"):
             if type(getattr(self, name)) is not bool:
                 raise AppError(f"{name} debe ser true o false.")
         for name in ("system_prompt", "user_agent", "accept_language", "output_dir"):
