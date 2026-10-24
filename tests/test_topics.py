@@ -161,7 +161,7 @@ class TopicSelectionTests(unittest.TestCase):
         for url, title in zip(urls, titles):
             data = {"@type": "NewsArticle", "headline": title, "articleBody": BODY, "datePublished": NOW.isoformat()}
             pages[url] = '<script type="application/ld+json">' + json.dumps(data) + "</script>"
-        with patch("manana.news._download", side_effect=lambda session, url: pages[url].encode("utf-8")):
+        with patch("manana.news._download", side_effect=lambda session, url, settings: pages[url].encode("utf-8")):
             articles, _ = collect_news(Settings(sources=(source,)), lambda _: None, Mock(), NOW)
         self.assertEqual(len(articles), 5)
         self.assertTrue(all(article.section == "Fútbol chileno" for article in articles))

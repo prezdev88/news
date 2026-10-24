@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import AppError, Settings
-from .lmstudio import LMStudio
+from .ollama import create_model_client
 from .news import CHILE, Article, collect_news, is_technology_article
 from .newspaper import LayoutOverflowError, render_edition
 
@@ -26,8 +26,8 @@ def generate(settings: Settings, progress=print) -> Path:
     settings.validate()
     if not settings.active_sources:
         raise AppError("Activa al menos una fuente en «Fuentes de noticias».")
-    progress("Conectando con LM Studio…")
-    client = LMStudio(settings, progress=progress)
+    progress(f"Conectando con {settings.provider}…")
+    client = create_model_client(settings, progress=progress)
     model = client.select_model()
     progress(f"Modelo: {model}")
     # Check the local model before downloading news, so a missing server fails fast.
@@ -55,7 +55,7 @@ def generate(settings: Settings, progress=print) -> Path:
     progress("Maquetando el periódico…")
     pdf_path = output / filename
     try:
-        render_edition(edition, pdf_path, settings.paper)
+        render_edition(edition, pdf_path, settings.paper, preview=settings.save_preview)
     except LayoutOverflowError:
         progress(f"Preparando resúmenes más breves para conservar las {settings.article_count} noticias en una página…")
         compact_stories = []
@@ -64,14 +64,15 @@ def generate(settings: Settings, progress=print) -> Path:
             summary = client.summarize(article, section, lead=index == 0, compact=True)
             compact_stories.append({**summary, "article": article})
         edition["stories"] = compact_stories
-        render_edition(edition, pdf_path, settings.paper)
+        render_edition(edition, pdf_path, settings.paper, preview=settings.save_preview)
     edition["paper"] = settings.paper
     edition["sources"] = [asdict(source) for source in settings.active_sources]
     edition["topics"] = list(settings.topics)
     edition["candidate_count"] = len(articles)
     edition["printed_count"] = len(edition["stories"])
     edition["technology_count"] = sum(is_technology_article(story["article"]) or story["section"] == "Tecnología" for story in edition["stories"])
-    pdf_path.with_suffix(".json").write_text(json.dumps(edition, ensure_ascii=False, indent=2, default=serialize) + "\n", encoding="utf-8")
+    if settings.save_metadata:
+        pdf_path.with_suffix(".json").write_text(json.dumps(edition, ensure_ascii=False, indent=2, default=serialize) + "\n", encoding="utf-8")
     for warning in warnings:
         progress("Aviso: " + warning)
     progress(f"PDF listo: {pdf_path} · {len(edition['stories'])} de {settings.article_count} noticias")

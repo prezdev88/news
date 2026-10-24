@@ -447,7 +447,7 @@ class OutputTests(unittest.TestCase):
             model_factory = lambda current, **kwargs: LMStudio(current, session, **kwargs)
             news_reader = lambda current, progress: collect_news(current, progress, FakeNewsSession(), NOW)
             messages = []
-            with patch("manana.pipeline.LMStudio", side_effect=model_factory), patch("manana.pipeline.collect_news", side_effect=news_reader):
+            with patch("manana.pipeline.create_model_client", side_effect=model_factory), patch("manana.pipeline.collect_news", side_effect=news_reader):
                 path = generate(settings, messages.append)
             self.check_pdf(path)
             audit = json.loads(path.with_suffix(".json").read_text())
@@ -464,7 +464,7 @@ class OutputTests(unittest.TestCase):
                     settings = Settings(output_dir=directory, article_count=7, paper=paper)
                     session = FakeModelSession()
                     factory = lambda current, **kwargs: LMStudio(current, session, **kwargs)
-                    with patch("manana.pipeline.LMStudio", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])):
+                    with patch("manana.pipeline.create_model_client", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])):
                         path = generate(settings, lambda _: None)
                     self.check_pdf(path)
                     audit = json.loads(path.with_suffix(".json").read_text())
@@ -478,7 +478,7 @@ class OutputTests(unittest.TestCase):
             settings = Settings(output_dir=directory, article_count=7)
             session = FakeModelSession()
             factory = lambda current, **kwargs: LMStudio(current, session, **kwargs)
-            with patch("manana.pipeline.LMStudio", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(3), [])):
+            with patch("manana.pipeline.create_model_client", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(3), [])):
                 with self.assertRaisesRegex(AppError, "Pediste 7.*solo.*3"):
                     generate(settings, lambda _: None)
             self.assertEqual(len(session.calls), 1)
@@ -491,13 +491,13 @@ class OutputTests(unittest.TestCase):
             factory = lambda current, **kwargs: LMStudio(current, session, **kwargs)
             render_counts = []
 
-            def overflow_then_render(edition, path, paper):
+            def overflow_then_render(edition, path, paper, **kwargs):
                 render_counts.append(len(edition["stories"]))
                 if len(render_counts) == 1:
                     raise LayoutOverflowError("Fixture: the first edition needs shorter summaries")
-                return render_edition(edition, path, paper)
+                return render_edition(edition, path, paper, **kwargs)
 
-            with patch("manana.pipeline.LMStudio", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), patch("manana.pipeline.render_edition", side_effect=overflow_then_render):
+            with patch("manana.pipeline.create_model_client", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), patch("manana.pipeline.render_edition", side_effect=overflow_then_render):
                 path = generate(settings, lambda _: None)
             self.check_pdf(path)
             self.assertEqual(render_counts, [7, 7])
@@ -511,7 +511,7 @@ class OutputTests(unittest.TestCase):
             settings = Settings(output_dir=directory, article_count=7, paper="Carta")
             session = FakeModelSession()
             factory = lambda current, **kwargs: LMStudio(current, session, **kwargs)
-            with patch("manana.pipeline.LMStudio", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), patch("manana.pipeline.render_edition", side_effect=LayoutOverflowError("No caben")) as renderer:
+            with patch("manana.pipeline.create_model_client", side_effect=factory), patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])), patch("manana.pipeline.render_edition", side_effect=LayoutOverflowError("No caben")) as renderer:
                 with self.assertRaises(LayoutOverflowError):
                     generate(settings, lambda _: None)
             self.assertEqual(renderer.call_count, 2)

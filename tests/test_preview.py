@@ -22,6 +22,9 @@ class PreviewTests(unittest.TestCase):
         self.app.latest_pdf = Path("edition.pdf")
         self.app.preview_image = None
         self.app.preview_item = None
+        self.app.preview_origin = None
+        self.app.preview_frame = None
+        self.app.preview_controls = None
         self.app.preview_surface = cairo.ImageSurface(cairo.FORMAT_RGB24, 1000, 1400)
         context = cairo.Context(self.app.preview_surface)
         context.set_source_rgb(1, 1, 1)
@@ -46,12 +49,21 @@ class PreviewTests(unittest.TestCase):
         self.addCleanup(photo.stop)
 
     def decode_image(self, **kwargs):
-        self.assertEqual(kwargs["format"], "PPM")
-        magic, dimensions, maximum, pixels = kwargs["data"].split(b"\n", 3)
-        self.assertEqual((magic, maximum), (b"P6", b"255"))
-        width, height = map(int, dimensions.split())
-        self.assertEqual(len(pixels), width * height * 3)
-        return SimpleNamespace(width=width, height=height, pixels=pixels)
+        image = SimpleNamespace()
+
+        def configure(**options):
+            self.assertEqual(options["format"], "PPM")
+            magic, dimensions, maximum, pixels = options["data"].split(b"\n", 3)
+            self.assertEqual((magic, maximum), (b"P6", b"255"))
+            width, height = map(int, dimensions.split())
+            self.assertEqual(len(pixels), width * height * 3)
+            if "width" in options:
+                self.assertEqual((options["width"], options["height"]), (width, height))
+            image.width, image.height, image.pixels = width, height, pixels
+
+        configure(**kwargs)
+        image.configure = Mock(side_effect=configure)
+        return image
 
     def show_image(self, x, y, *, image, anchor):
         self.image_origin = (x, y)
@@ -149,15 +161,68 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(self.pixel_at(135, 208), 0)
         refine = next(callback for delay, callback in pending.values() if delay == 150)
         refine()
-        self.assertEqual(self.photo.call_count, 2)
+        self.assertEqual(self.photo.call_count, 1)
+        self.app.preview_image.configure.assert_called_once()
         self.assertFalse(pending)
         self.app.preview.create_image.assert_called_once()
-        self.app.preview.itemconfigure.assert_called_once()
+        self.app.preview.itemconfigure.assert_not_called()
 
         self.app.zoom_preview(SimpleNamespace(num=4, x=135, y=208))
         self.app.reset_preview_zoom()
         self.assertFalse(pending)
         self.assertEqual(self.app.preview_zoom, 1.0)
+
+    def test_pan_zoom_and_refinement_reuse_one_image_and_shrink_its_pixel_buffer(self):
+        self.app.preview_zoom = 3.0
+        self.app.preview_offset = (400.0, 400.0)
+        self.app.draw_preview(interactive=True)
+        image = self.app.preview_image
+        self.assertEqual((image.width, image.height), (600, 800))
+        self.assertEqual(self.pixel_at(200, 220), 0)
+        self.app.start_preview_drag(SimpleNamespace(x=300, y=400))
+        self.app.drag_preview(SimpleNamespace(x=360, y=450))
+        self.app.draw_preview(interactive=True)
+        self.assertIs(self.app.preview_image, image)
+        self.assertEqual(self.pixel_at(200, 220), 0xffffff)
+        self.assertEqual(self.pixel_at(260, 270), 0)
+        self.app.end_preview_drag(None)
+        self.app.draw_preview()
+        self.app.reset_preview_zoom()
+        self.assertLess(image.width, 600)
+        self.assertLess(image.height, 800)
+        self.assertEqual(self.pixel_at(135, 208), 0)
+        self.photo.assert_called_once()
+        self.app.preview.create_image.assert_called_once()
+        self.app.preview.itemconfigure.assert_not_called()
+
+    def test_unchanged_page_does_not_upload_pixels_or_reconfigure_controls(self):
+        self.app.draw_preview()
+        self.app.preview.configure.reset_mock()
+        self.app.reset_zoom_button.configure.reset_mock()
+        self.app.zoom_status.set.reset_mock()
+        for _ in range(10):
+            self.app.draw_preview(interactive=True)
+            self.app.draw_preview()
+        self.photo.assert_called_once()
+        self.app.preview_image.configure.assert_not_called()
+        self.app.preview.configure.assert_not_called()
+        self.app.reset_zoom_button.configure.assert_not_called()
+        self.app.zoom_status.set.assert_not_called()
+
+    def test_loading_a_different_page_at_the_same_size_replaces_cached_pixels(self):
+        self.app.draw_preview()
+        image = self.app.preview_image
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "replacement.png"
+            surface = cairo.ImageSurface(cairo.FORMAT_RGB24, 1000, 1400)
+            context = cairo.Context(surface)
+            context.set_source_rgb(0, 0, 1)
+            context.paint()
+            surface.write_to_png(str(path))
+            self.app.show_preview(path)
+        self.assertIs(self.app.preview_image, image)
+        self.assertEqual(self.pixel_at(135, 208), 0x0000ff)
+        self.photo.assert_called_once()
 
     def test_raw_rgb_encoding_preserves_color_order(self):
         surface = cairo.ImageSurface(cairo.FORMAT_RGB24, 2, 1)

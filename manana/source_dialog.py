@@ -6,6 +6,7 @@ from tkinter import messagebox, ttk
 
 from .config import AppError, DEFAULT_TOPICS, SOURCES, Settings, custom_source, source_sort_key, source_topic
 from .sorting import alphabetical_key
+from .theme import BORDER, MUTED, SURFACE, center_dialog
 from .topic_dialog import TopicsDialog
 
 
@@ -19,23 +20,28 @@ class SourcesDialog(tk.Toplevel):
         self.on_save = on_save
         self.title("Fuentes de noticias")
         self.transient(parent)
-        self.geometry("800x510")
-        self.minsize(640, 420)
-        self.configure(bg=parent.cget("bg"))
-        content = ttk.Frame(self, padding=22)
+        self.geometry("880x590")
+        self.minsize(760, 540)
+        self.configure(bg=SURFACE)
+        content = ttk.Frame(self, padding=26)
         content.pack(fill="both", expand=True)
-        ttk.Label(content, text="Tus fuentes de noticias", font=("Liberation Serif", 24, "bold")).pack(anchor="w")
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(3, weight=1)
+        ttk.Label(content, text="TU SELECCIÓN", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(content, text="Tus fuentes de noticias", style="DialogTitle.TLabel").grid(row=1, column=0, sticky="w")
         ttk.Label(
             content, text="Marca los medios que quieres consultar. Puedes añadir una sección de noticias o un enlace RSS/Atom.",
             style="Muted.TLabel", wraplength=580,
-        ).pack(anchor="w", pady=(6, 14))
-        table = ttk.Frame(content)
-        table.pack(fill="both", expand=True)
+        ).grid(row=2, column=0, sticky="w", pady=(6, 14))
+        table = tk.Frame(content, bg=SURFACE, highlightbackground=BORDER, highlightthickness=1)
+        table.grid(row=3, column=0, sticky="nsew")
         self.tree = ttk.Treeview(table, columns=("enabled", "name", "section", "url"), show="headings", selectmode="browse", height=8)
         for name, title, width in (("enabled", "Usar", 50), ("name", "Medio", 150), ("section", "Tema", 100), ("url", "URL", 380)):
             self.tree.heading(name, text=title)
             self.tree.column(name, width=width, minwidth=45 if name == "enabled" else 80, stretch=name == "url")
         self.tree.column("enabled", anchor="center")
+        self.tree.tag_configure("alternate", background="#f8fafb")
+        self.tree.tag_configure("inactive", foreground=MUTED)
         scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scroll.set)
         scroll.pack(side="right", fill="y")
@@ -45,21 +51,24 @@ class SourcesDialog(tk.Toplevel):
         self.tree.bind("<Double-1>", self.double_click_source)
         self.tree.bind("<<TreeviewSelect>>", self.update_actions)
         actions = ttk.Frame(content)
-        actions.pack(fill="x", pady=(12, 0))
+        actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))
         ttk.Button(actions, text="Añadir…", command=self.edit_source).pack(side="left")
         self.toggle_button = ttk.Button(actions, text="Activar / desactivar", command=self.toggle_source)
         self.toggle_button.pack(side="left", padx=(6, 0))
         self.edit_button = ttk.Button(actions, text="Editar…", command=self.edit_selected)
         self.edit_button.pack(side="left", padx=(6, 0))
-        self.delete_button = ttk.Button(actions, text="Eliminar", command=self.delete_source)
+        self.delete_button = ttk.Button(actions, text="Eliminar", style="Danger.TButton", command=self.delete_source)
         self.delete_button.pack(side="left", padx=(6, 0))
         ttk.Button(actions, text="Temas…", command=self.manage_topics).pack(side="right")
-        ttk.Button(content, text="Restaurar fuentes iniciales", command=self.restore_defaults).pack(anchor="w", pady=(10, 0))
+        ttk.Button(content, text="Restaurar fuentes iniciales", style="Quiet.TButton", command=self.restore_defaults).grid(row=5, column=0, sticky="w", pady=(10, 0))
+        ttk.Separator(content).grid(row=6, column=0, sticky="ew", pady=(14, 0))
         footer = ttk.Frame(content)
-        footer.pack(fill="x", pady=(16, 0))
+        footer.grid(row=7, column=0, sticky="ew", pady=(16, 0))
         ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="left")
         ttk.Button(footer, text="Guardar fuentes", command=self.save, style="Primary.TButton").pack(side="right")
         self.refresh()
+        self.bind("<Escape>", lambda _event: self.destroy())
+        center_dialog(self, parent)
         self.grab_set()
 
     def selected_index(self):
@@ -72,7 +81,10 @@ class SourcesDialog(tk.Toplevel):
         self.topics.sort(key=alphabetical_key)
         self.tree.delete(*self.tree.get_children())
         for index, source in enumerate(self.sources):
-            self.tree.insert("", "end", iid=str(index), values=("☑" if source.enabled else "☐", source.name, source_topic(source), source.url))
+            tags = ("alternate",) if index % 2 else ()
+            if not source.enabled:
+                tags += ("inactive",)
+            self.tree.insert("", "end", iid=str(index), values=("☑" if source.enabled else "☐", source.name, source_topic(source), source.url), tags=tags)
         if selected_url is not None:
             item = str(next(index for index, source in enumerate(self.sources) if source.url == selected_url))
             self.tree.selection_set(item)
@@ -144,9 +156,11 @@ class SourcesDialog(tk.Toplevel):
         editor.title("Editar fuente" if previous else "Añadir fuente")
         editor.transient(self)
         editor.resizable(False, False)
-        editor.configure(bg=self.cget("bg"))
-        content = ttk.Frame(editor, padding=22)
+        editor.configure(bg=SURFACE)
+        content = ttk.Frame(editor, padding=26)
         content.pack(fill="both", expand=True)
+        ttk.Label(content, text="Editar fuente" if previous else "Una nueva perspectiva", style="DialogTitle.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(content, text="Añade el medio y la sección que quieres leer.", style="Muted.TLabel").pack(anchor="w", pady=(0, 20))
         name = tk.StringVar(editor, value=previous.name if previous else "")
         url = tk.StringVar(editor, value=previous.url if previous else "")
         default_topic = "Nacionales" if "Nacionales" in self.topics else self.topics[0]
@@ -192,6 +206,8 @@ class SourcesDialog(tk.Toplevel):
         ttk.Button(buttons, text="Cancelar", command=close_editor).pack(side="left")
         ttk.Button(buttons, text="Guardar fuente", command=accept, style="Primary.TButton").pack(side="right")
         editor.protocol("WM_DELETE_WINDOW", close_editor)
+        editor.bind("<Escape>", lambda _event: close_editor())
+        center_dialog(editor, self)
         editor.grab_set()
         name_entry.focus_set()
 

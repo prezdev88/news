@@ -12,16 +12,12 @@ from tkinter import filedialog, messagebox, ttk
 import cairo
 
 from .config import AppError, Settings, load_settings, save_settings
-from .lmstudio import LMStudio
+from .ollama import create_model_client
 from .pipeline import generate, open_pdf
 from .printing import list_printers, print_pdf
 from .source_dialog import SourcesDialog
+from .theme import ACCENT, BACKGROUND, ERROR, INK, MUTED, SURFACE, WORKSPACE, apply_theme, center_dialog, document_icon
 
-BACKGROUND = "#efeee8"
-PAPER = "#ffffff"
-INK = "#202923"
-MUTED = "#626a63"
-ACCENT = "#254c3c"
 MIN_PREVIEW_ZOOM = 0.5
 MAX_PREVIEW_ZOOM = 5.0
 
@@ -47,6 +43,9 @@ class NewspaperApp:
         self.latest_pdf = None
         self.preview_image = None
         self.preview_item = None
+        self.preview_origin = None
+        self.preview_frame = None
+        self.preview_controls = None
         self.preview_surface = None
         self.preview_render_job = None
         self.preview_refine_job = None
@@ -55,7 +54,7 @@ class NewspaperApp:
         self.preview_drag_point = None
         self.fields = {}
         root.title("La Mañana · Tu periódico local")
-        root.geometry("1100x800")
+        root.geometry("1180x820")
         root.minsize(920, 720)
         root.configure(bg=BACKGROUND)
         root.protocol("WM_DELETE_WINDOW", self.close)
@@ -67,36 +66,38 @@ class NewspaperApp:
         root.after(250, self.discover)
 
     def _build(self):
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-        style.configure("TFrame", background=BACKGROUND)
-        style.configure("TLabel", background=BACKGROUND, foreground=INK, font=("DejaVu Sans", 10))
-        style.configure("Muted.TLabel", foreground=MUTED, font=("DejaVu Sans", 9))
-        style.configure("TEntry", padding=8, fieldbackground=PAPER)
-        style.configure("TCombobox", padding=7, fieldbackground=PAPER)
-        style.configure("TButton", padding=(12, 9), font=("DejaVu Sans", 9))
-        style.configure("Compact.TButton", padding=(8, 3))
-        style.configure("Primary.TButton", background=ACCENT, foreground="white", padding=(18, 13), font=("DejaVu Sans", 11, "bold"))
-        style.map("Primary.TButton", background=[("active", "#35664e"), ("disabled", "#8b9990")])
-        outer = ttk.Frame(self.root, padding=28)
+        self.font = apply_theme(self.root)
+        outer = ttk.Frame(self.root, style="App.TFrame", padding=24)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="TU PERIÓDICO · A TU RITMO", font=("DejaVu Sans", 9, "bold"), foreground=ACCENT).pack(anchor="w")
-        ttk.Label(outer, text="La Mañana", font=("Liberation Serif", 38, "bold")).pack(anchor="w", pady=(4, 0))
-        ttk.Label(outer, text="Actualidad y tecnología de Chile, resumidas en tu equipo y listas en una página.", style="Muted.TLabel").pack(anchor="w", pady=(4, 22))
-        body = ttk.Frame(outer)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 20))
+        mark = tk.Canvas(header, width=48, height=48, bg=BACKGROUND, highlightthickness=0)
+        mark.pack(side="left", padx=(0, 12))
+        document_icon(mark, 10, 7)
+        brand = ttk.Frame(header, style="App.TFrame")
+        brand.pack(side="left")
+        ttk.Label(brand, text="La Mañana", background=BACKGROUND, font=("Liberation Serif", 28, "bold")).pack(anchor="w")
+        ttk.Label(brand, text="Tu perspectiva del día, en una página.", style="AppMuted.TLabel").pack(anchor="w")
+        connection = ttk.Frame(header, style="App.TFrame")
+        connection.pack(side="right")
+        self.connection_status = tk.StringVar(value="Comprobando LM Studio")
+        self.connection_label = ttk.Label(connection, textvariable=self.connection_status, style="Connection.TLabel")
+        self.connection_label.pack(anchor="e")
+        ttk.Label(connection, text="Resúmenes en tu equipo", style="AppMuted.TLabel").pack(anchor="e", pady=(4, 0))
+
+        body = ttk.Frame(outer, style="App.TFrame")
         body.pack(fill="both", expand=True)
-        left = ttk.Frame(body, width=400)
-        left.pack(side="left", fill="y", padx=(0, 26))
+        left = ttk.Frame(body, style="App.TFrame", width=340)
+        left.pack(side="left", fill="y", padx=(0, 18))
         left.pack_propagate(False)
-        right = ttk.Frame(body)
+        right = ttk.Frame(body, style="Card.TFrame", padding=14)
         right.pack(side="left", fill="both", expand=True)
-        preview_tools = ttk.Frame(right)
-        preview_tools.pack(fill="x", pady=(0, 8))
-        self.zoom_status = tk.StringVar(value="Zoom 100% · Rueda: zoom · Arrastra: mover")
-        ttk.Label(preview_tools, textvariable=self.zoom_status, style="Muted.TLabel").pack(side="left")
-        self.reset_zoom_button = ttk.Button(preview_tools, text="Ajustar página", command=self.reset_preview_zoom, state="disabled")
-        self.reset_zoom_button.pack(side="right")
-        self.preview = tk.Canvas(right, bg="#dedfd7", highlightthickness=0, width=1, height=1)
+        preview_header = ttk.Frame(right)
+        preview_header.pack(fill="x", pady=(2, 12))
+        ttk.Label(preview_header, text="Tu periódico", style="Heading.TLabel").pack(side="left")
+        self.edition_badge = ttk.Label(preview_header, text="VISTA PREVIA", style="Badge.TLabel")
+        self.edition_badge.pack(side="right")
+        self.preview = tk.Canvas(right, bg=WORKSPACE, highlightthickness=0, width=1, height=1)
         self.preview.pack(fill="both", expand=True)
         self.preview.bind("<Configure>", self.schedule_preview_draw)
         for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
@@ -105,55 +106,82 @@ class NewspaperApp:
         self.preview.bind("<B1-Motion>", self.drag_preview)
         self.preview.bind("<ButtonRelease-1>", self.end_preview_drag)
         self.preview.bind("<Double-Button-1>", self.reset_preview_zoom)
+        preview_tools = ttk.Frame(right)
+        preview_tools.pack(fill="x", pady=(10, 0))
+        self.zoom_status = tk.StringVar(value="100%")
+        ttk.Label(preview_tools, textvariable=self.zoom_status, style="Muted.TLabel", width=5).pack(side="left")
+        ttk.Label(preview_tools, text="Rueda para zoom · Arrastra para mover", style="Muted.TLabel").pack(side="left", padx=(8, 0))
+        self.reset_zoom_button = ttk.Button(preview_tools, text="Ajustar página", style="Toolbar.TButton", command=self.reset_preview_zoom, state="disabled")
+        self.reset_zoom_button.pack(side="right")
+        ttk.Separator(right).pack(fill="x", pady=(12, 12))
         actions = ttk.Frame(right)
-        actions.pack(fill="x", pady=(12, 0))
+        actions.pack(fill="x")
         self.open_button = ttk.Button(actions, text="Abrir PDF", command=self.open_latest, state="disabled")
         self.open_button.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        self.print_button = ttk.Button(actions, text="Imprimir PDF…", command=self.start_printing, state="disabled")
+        self.print_button = ttk.Button(actions, text="Imprimir…", command=self.start_printing, state="disabled")
         self.print_button.pack(side="left", fill="x", expand=True)
-        ttk.Label(left, text="01   TU MODELO LOCAL", font=("DejaVu Sans", 9, "bold")).pack(anchor="w", pady=(0, 12))
-        self.entry(left, "Servidor de LM Studio", "base_url", self.settings.base_url)
-        model_row = ttk.Frame(left)
-        model_row.pack(fill="x", pady=(4, 12))
-        ttk.Label(model_row, text="Modelo").pack(anchor="w", pady=(0, 5))
-        self.fields["model"] = tk.StringVar(value=self.settings.model)
-        self.model_box = ttk.Combobox(model_row, textvariable=self.fields["model"], width=16)
-        self.model_box.pack(side="left", fill="x", expand=True)
-        self.discover_button = ttk.Button(model_row, text="Detectar", command=self.discover)
-        self.discover_button.pack(side="right", padx=(8, 0))
-        edition_header = ttk.Frame(left)
-        edition_header.pack(fill="x", pady=(12, 8))
-        ttk.Label(edition_header, text="02   TU EDICIÓN", font=("DejaVu Sans", 9, "bold")).pack(side="left")
-        self.sources_button = ttk.Button(edition_header, text=f"Fuentes ({len(self.settings.active_sources)})…", style="Compact.TButton", command=self.manage_sources)
-        self.sources_button.pack(side="right")
-        options = ttk.Frame(left)
-        options.pack(fill="x")
-        for key, title, value, values in (
+
+        controls = ttk.Frame(left, style="Card.TFrame", padding=16)
+        controls.pack(fill="x")
+        ttk.Label(controls, text="Prepara tu edición", style="Heading.TLabel").pack(anchor="w", pady=(0, 12))
+        self.settings_tabs = ttk.Notebook(controls)
+        self.settings_tabs.pack(fill="x")
+        edition = ttk.Frame(self.settings_tabs)
+        model = ttk.Frame(self.settings_tabs)
+        self.settings_tabs.add(edition, text="Edición")
+        self.settings_tabs.add(model, text="Modelo local")
+        self.model_tab = model
+        options = ttk.Frame(edition)
+        options.pack(fill="x", pady=(2, 12))
+        for column, (key, title, value, values) in enumerate((
             ("paper", "Papel", self.settings.paper, ("A4", "Carta")),
             ("article_count", "Noticias", str(self.settings.article_count), ("3", "4", "5", "6", "7")),
-            ("lookback_hours", "Últimas horas", str(self.settings.lookback_hours), ("12", "24", "48", "72")),
-        ):
-            column = ttk.Frame(options)
-            column.pack(side="left", fill="x", expand=True, padx=(0, 10))
-            ttk.Label(column, text=title, style="Muted.TLabel").pack(anchor="w", pady=(0, 5))
+            ("lookback_hours", "Horas", str(self.settings.lookback_hours), ("12", "24", "48", "72")),
+        )):
+            options.columnconfigure(column, weight=1, uniform="option")
+            group = ttk.Frame(options)
+            group.grid(row=0, column=column, sticky="ew", padx=(0, 8 if column < 2 else 0))
+            ttk.Label(group, text=title, style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
             self.fields[key] = tk.StringVar(value=value)
-            ttk.Combobox(column, textvariable=self.fields[key], values=values, state="readonly", width=9).pack(fill="x")
-        self.entry(left, "Carpeta de salida", "output_dir", self.settings.output_dir)
-        ttk.Button(left, text="Elegir carpeta…", command=self.choose_directory).pack(anchor="w", pady=(0, 12))
-        self.generate_button = ttk.Button(left, text="Generar mi periódico", style="Primary.TButton", command=self.start_generation)
-        self.generate_button.pack(fill="x", pady=(6, 10))
-        self.progress = ttk.Progressbar(left, mode="indeterminate")
-        self.progress.pack(fill="x", pady=(0, 9))
-        self.status = tk.StringVar(value="Carga un modelo en LM Studio y activa Developer → Start Server.")
-        ttk.Label(left, textvariable=self.status, style="Muted.TLabel", wraplength=400).pack(fill="x")
-        self.log = tk.Text(left, width=1, height=7, bg="#e6e7df", fg=INK, font=("DejaVu Sans Mono", 8), relief="flat", padx=10, pady=10, state="disabled", wrap="word")
-        self.log.pack(fill="both", expand=True, pady=(12, 0))
-        ttk.Label(outer, text="Internet para leer los medios · Resúmenes con LM Studio · Cada edición conserva sus fuentes", style="Muted.TLabel").pack(anchor="w", pady=(18, 0))
+            ttk.Combobox(group, textvariable=self.fields[key], values=values, state="readonly", width=5).pack(fill="x")
+        self.sources_button = ttk.Button(edition, text=f"Fuentes ({len(self.settings.active_sources)})…", command=self.manage_sources)
+        self.sources_button.pack(fill="x")
+        ttk.Label(edition, text="Escoge los medios y organiza tus temas.", style="Muted.TLabel").pack(anchor="w", pady=(6, 8))
+        ttk.Label(edition, text="Guardar en", style="Muted.TLabel").pack(anchor="w", pady=(0, 6))
+        folder = ttk.Frame(edition)
+        folder.pack(fill="x", pady=(0, 2))
+        self.fields["output_dir"] = tk.StringVar(value=self.settings.output_dir)
+        ttk.Entry(folder, textvariable=self.fields["output_dir"], width=12).pack(side="left", fill="x", expand=True)
+        ttk.Button(folder, text="Elegir…", style="Compact.TButton", command=self.choose_directory).pack(side="right", padx=(6, 0))
+        self.entry(model, "Servidor de LM Studio", "base_url", self.settings.base_url)
+        ttk.Label(model, text="Modelo", style="Muted.TLabel").pack(anchor="w", pady=(8, 6))
+        model_row = ttk.Frame(model)
+        model_row.pack(fill="x")
+        self.fields["model"] = tk.StringVar(value=self.settings.model)
+        self.model_box = ttk.Combobox(model_row, textvariable=self.fields["model"], width=12)
+        self.model_box.pack(side="left", fill="x", expand=True)
+        self.discover_button = ttk.Button(model_row, text="Detectar", style="Compact.TButton", command=self.discover)
+        self.discover_button.pack(side="right", padx=(6, 0))
+        ttk.Label(model, text="Carga tu modelo en LM Studio y activa el servidor local para empezar.", style="Muted.TLabel", wraplength=280).pack(anchor="w", pady=(14, 4))
+        ttk.Separator(controls).pack(fill="x", pady=(12, 12))
+        self.generate_button = ttk.Button(controls, text="Generar mi periódico", style="Primary.TButton", command=self.start_generation)
+        self.generate_button.pack(fill="x")
+
+        activity = ttk.Frame(left, style="Card.TFrame", padding=16)
+        activity.pack(fill="both", expand=True, pady=(14, 0))
+        ttk.Label(activity, text="ACTIVIDAD", style="Section.TLabel").pack(anchor="w")
+        self.progress = ttk.Progressbar(activity, mode="indeterminate")
+        self.progress.pack(fill="x", pady=(12, 10))
+        self.status = tk.StringVar(value="Prepara tu selección y genera la edición de hoy.")
+        ttk.Label(activity, textvariable=self.status, style="Muted.TLabel", wraplength=300).pack(fill="x")
+        self.log = tk.Text(activity, width=1, height=3, bg=SURFACE, fg=MUTED, font=(self.font, 9), relief="flat", borderwidth=0, highlightthickness=0, padx=0, pady=0, state="disabled", wrap="word")
+        self.log.pack(fill="both", expand=True, pady=(10, 0))
+        ttk.Label(outer, text="Hecho para leer con calma.  ·  Noticias de Chile  ·  Fuentes en cada edición", style="AppMuted.TLabel").pack(anchor="w", pady=(14, 0))
 
     def entry(self, parent, label, key, value):
-        ttk.Label(parent, text=label, style="Muted.TLabel").pack(anchor="w", pady=(10, 5))
+        ttk.Label(parent, text=label, style="Muted.TLabel").pack(anchor="w", pady=(2, 6))
         self.fields[key] = tk.StringVar(value=value)
-        ttk.Entry(parent, textvariable=self.fields[key]).pack(fill="x", pady=(0, 8))
+        ttk.Entry(parent, textvariable=self.fields[key]).pack(fill="x")
 
     def read_settings(self):
         try:
@@ -202,11 +230,13 @@ class NewspaperApp:
             self.status.set(str(exc))
             return
         self.set_busy(True)
+        self.connection_status.set("Conectando con LM Studio…")
+        self.connection_label.configure(foreground=MUTED)
         self.status.set("Buscando los modelos disponibles en LM Studio…")
 
         def worker():
             try:
-                models = LMStudio(settings).models()
+                models = create_model_client(settings).models()
                 self.events.put(("models", models))
             except AppError as exc:
                 self.events.put(("connection_error", str(exc)))
@@ -246,6 +276,8 @@ class NewspaperApp:
             while True:
                 kind, value = self.events.get_nowait()
                 if kind == "models":
+                    self.connection_status.set("●  LM Studio conectado")
+                    self.connection_label.configure(foreground=ACCENT)
                     self.model_box.configure(values=value)
                     if not self.fields["model"].get() or self.fields["model"].get() not in value:
                         gemma = [name for name in value if "gemma" in name.lower()]
@@ -270,6 +302,9 @@ class NewspaperApp:
                     messagebox.showerror("Imprimir periódico", value, parent=self.root)
                 elif kind in {"error", "connection_error"}:
                     self.status.set(value)
+                    if kind == "connection_error":
+                        self.connection_status.set("●  LM Studio sin conexión")
+                        self.connection_label.configure(foreground=ERROR)
                     if kind == "error":
                         messagebox.showerror("No se pudo generar la edición", value, parent=self.root)
                 elif kind == "idle":
@@ -367,23 +402,39 @@ class NewspaperApp:
         width, height = self.preview.winfo_width(), self.preview.winfo_height()
         if width <= 32 or height <= 32:
             return
-        self.zoom_status.set(f"Zoom {self.preview_zoom:.0%} · Rueda: zoom · Arrastra: mover")
-        self.reset_zoom_button.configure(state="normal" if self.preview_surface is not None else "disabled")
-        self.preview.configure(cursor="fleur" if self.preview_drag_point else "hand2" if self.preview_surface is not None else "")
+        controls = (f"{self.preview_zoom:.0%}", self.preview_surface is not None, bool(self.preview_drag_point))
+        previous_controls = self.preview_controls
+        if previous_controls is None or controls[0] != previous_controls[0]:
+            self.zoom_status.set(controls[0])
+        if previous_controls is None or controls[1] != previous_controls[1]:
+            self.reset_zoom_button.configure(state="normal" if controls[1] else "disabled")
+        if previous_controls is None or controls[1:] != previous_controls[1:]:
+            self.preview.configure(cursor="fleur" if controls[2] else "hand2" if controls[1] else "")
+        self.preview_controls = controls
         if self.preview_surface is None:
             self.preview.delete("all")
             self.preview_item = None
             self.preview_image = None
+            self.preview_origin = None
+            self.preview_frame = None
             center_x, center_y = width / 2, height / 2
             text_width = min(320, width - 40)
-            self.preview.create_text(center_x, center_y - 80, text="La Mañana", font=("Liberation Serif", 30, "bold"), fill=INK)
-            self.preview.create_line(center_x - text_width / 2, center_y - 30, center_x + text_width / 2, center_y - 30, fill=MUTED)
-            message = "PDF disponible para abrir o imprimir." if self.latest_pdf else "Tu próxima edición aparecerá aquí"
-            self.preview.create_text(center_x, center_y + 15, width=text_width, text=message, font=("DejaVu Sans", 12), fill=MUTED)
-            self.preview.create_text(center_x, center_y + 70, width=text_width, text="PDF de una página\nA4 o Carta · Fuentes consultables", font=("DejaVu Sans", 10), fill=MUTED)
+            self.preview.create_oval(center_x - 48, center_y - 135, center_x + 48, center_y - 39, fill=SURFACE, outline="")
+            document_icon(self.preview, center_x - 17, center_y - 108, scale=1.2)
+            face = getattr(self, "font", "DejaVu Sans")
+            message = "Tu PDF está listo" if self.latest_pdf else "Aquí comienza tu mañana"
+            self.preview.create_text(center_x, center_y, width=text_width, text=message, font=(face, 17, "bold"), fill=INK)
+            description = "Abre o imprime tu edición con los botones de abajo." if self.latest_pdf else "Elige tus fuentes y genera un periódico hecho para ti. Tu edición aparecerá aquí."
+            self.preview.create_text(center_x, center_y + 62, width=text_width, justify="center", text=description, font=(face, 10), fill=MUTED)
+            self.preview.create_text(center_x, center_y + 125, width=text_width, text="UNA PÁGINA · TODA TU ACTUALIDAD", font=(face, 8, "bold"), fill=MUTED)
             return
         original = self.preview_surface
         width, height, scale, left, top = self.preview_geometry()
+        frame = (original, width, height, scale, left, top)
+        if self.preview_frame is not None:
+            previous_frame, previous_interactive = self.preview_frame
+            if frame == previous_frame and (interactive or not previous_interactive):
+                return
         image_left, image_top = max(0, math.floor(left)), max(0, math.floor(top))
         image_width = min(width, math.ceil(left + original.get_width() * scale)) - image_left
         image_height = min(height, math.ceil(top + original.get_height() * scale)) - image_top
@@ -397,17 +448,26 @@ class NewspaperApp:
         context.set_source_surface(original)
         context.get_source().set_filter(cairo.FILTER_BILINEAR if interactive else cairo.FILTER_BEST)
         context.paint()
-        image = tk.PhotoImage(data=preview_ppm(resized), format="PPM", master=self.root)
+        data = preview_ppm(resized)
+        if self.preview_image is None:
+            image = tk.PhotoImage(data=data, format="PPM", master=self.root)
+        else:
+            image = self.preview_image
+            # Keep the Tk image and canvas item alive. Updating their pixels
+            # avoids allocating and destroying a server-side image every frame.
+            image.configure(data=data, format="PPM", width=image_width, height=image_height)
         if self.preview_item is None:
             self.preview.delete("all")
             self.preview_item = self.preview.create_image(image_left, image_top, image=image, anchor="nw")
-        else:
+        elif self.preview_origin != (image_left, image_top):
             self.preview.coords(self.preview_item, image_left, image_top)
-            self.preview.itemconfigure(self.preview_item, image=image)
         self.preview_image = image
+        self.preview_origin = (image_left, image_top)
+        self.preview_frame = (frame, interactive)
 
     def load_pdf(self, path):
         self.latest_pdf = Path(path)
+        self.edition_badge.configure(text="PDF LISTO")
         self.open_button.configure(state="normal")
         self.print_button.configure(state="disabled" if self.busy else "normal")
         self.preview_surface = None
@@ -452,10 +512,11 @@ class NewspaperApp:
         dialog.title("Imprimir periódico")
         dialog.transient(self.root)
         dialog.resizable(False, False)
-        dialog.configure(bg=BACKGROUND)
-        content = ttk.Frame(dialog, padding=22)
+        dialog.configure(bg=SURFACE)
+        content = ttk.Frame(dialog, padding=26)
         content.pack(fill="both", expand=True)
-        ttk.Label(content, text="Imprimir tu periódico", font=("Liberation Serif", 23, "bold")).pack(anchor="w")
+        ttk.Label(content, text="DEL PDF AL PAPEL", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(content, text="Imprimir tu periódico", style="DialogTitle.TLabel").pack(anchor="w")
         ttk.Label(content, text=path.name, style="Muted.TLabel", wraplength=390).pack(anchor="w", pady=(5, 18))
         selected = self.settings.printer if self.settings.printer in available.names else available.default or available.names[0]
         printer = tk.StringVar(value=selected)
@@ -464,7 +525,8 @@ class NewspaperApp:
         paper = tk.StringVar(value="Carta (Letter)" if self.fields["paper"].get() == "Carta" else "A4")
         ttk.Label(content, text="Papel").pack(anchor="w", pady=(13, 5))
         ttk.Combobox(content, textvariable=paper, values=("A4", "Carta (Letter)"), state="readonly").pack(fill="x")
-        ttk.Label(content, text="Blanco y negro · Una cara · Una copia", style="Muted.TLabel").pack(anchor="w", pady=(14, 18))
+        ttk.Label(content, text="Blanco y negro · Una cara · Una copia", style="Badge.TLabel").pack(anchor="w", pady=(18, 18))
+        ttk.Separator(content).pack(fill="x", pady=(0, 18))
         buttons = ttk.Frame(content)
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side="left")
@@ -476,6 +538,8 @@ class NewspaperApp:
             self.queue_print(path, destination, size)
 
         ttk.Button(buttons, text="Imprimir en negro", style="Primary.TButton", command=submit).pack(side="right")
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        center_dialog(dialog, self.root)
         dialog.grab_set()
 
     def queue_print(self, path, printer, paper):

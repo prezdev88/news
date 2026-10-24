@@ -240,7 +240,7 @@ def _draw_page(context, edition, paper, links=False):
     typesetter.text("LA MAÑANA  /  01", margin, footer_y + 27, 7, SANS, align="right", box_width=content_width)
 
 
-def render_edition(edition: dict, pdf_path: Path, paper: str = "Carta") -> Path:
+def render_edition(edition: dict, pdf_path: Path, paper: str = "Carta", *, preview: bool = True) -> Path:
     if paper not in SIZES:
         raise AppError("El papel debe ser A4 o Carta.")
     width, height = SIZES[paper]
@@ -257,12 +257,13 @@ def render_edition(edition: dict, pdf_path: Path, paper: str = "Carta") -> Path:
         context.show_page()
         surface.finish()
         temporary.replace(pdf_path)
-        image = cairo.ImageSurface(cairo.FORMAT_RGB24, round(width * 1.6), round(height * 1.6))
-        image_context = cairo.Context(image)
-        image_context.scale(1.6, 1.6)
-        image_context.set_source_surface(recording, 0, 0)
-        image_context.paint()
-        image.write_to_png(str(pdf_path.with_suffix(".png")))
+        if preview:
+            image = cairo.ImageSurface(cairo.FORMAT_RGB24, round(width * 1.6), round(height * 1.6))
+            image_context = cairo.Context(image)
+            image_context.scale(1.6, 1.6)
+            image_context.set_source_surface(recording, 0, 0)
+            image_context.paint()
+            image.write_to_png(str(pdf_path.with_suffix(".png")))
     except Exception:
         temporary.unlink(missing_ok=True)
         raise

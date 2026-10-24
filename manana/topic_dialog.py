@@ -5,6 +5,7 @@ from dataclasses import replace
 from tkinter import messagebox, ttk
 
 from .config import AppError, remove_topic, rename_topic, source_topic, topic_name
+from .theme import ACCENT, BORDER, INK, SOFT_ACCENT, SURFACE, center_dialog
 
 
 class TopicsDialog(tk.Toplevel):
@@ -16,14 +17,15 @@ class TopicsDialog(tk.Toplevel):
         self.title("Temas del periódico")
         self.transient(parent)
         self.resizable(False, False)
-        self.configure(bg=parent.cget("bg"))
-        content = ttk.Frame(self, padding=22)
+        self.configure(bg=SURFACE)
+        content = ttk.Frame(self, padding=26)
         content.pack(fill="both", expand=True)
-        ttk.Label(content, text="Tus temas", font=("Liberation Serif", 24, "bold")).pack(anchor="w")
+        ttk.Label(content, text="TU ACTUALIDAD", style="Section.TLabel").pack(anchor="w", pady=(0, 6))
+        ttk.Label(content, text="Tus temas", style="DialogTitle.TLabel").pack(anchor="w")
         ttk.Label(content, text="Crea o renombra categorías como Deportes, Cultura o Ciencia.", style="Muted.TLabel", wraplength=460).pack(anchor="w", pady=(6, 12))
         listing = ttk.Frame(content)
         listing.pack(fill="both", expand=True)
-        self.listbox = tk.Listbox(listing, height=9, width=53, exportselection=False, font=("DejaVu Sans", 10), relief="flat")
+        self.listbox = tk.Listbox(listing, height=9, width=53, exportselection=False, font="TkTextFont", relief="flat", borderwidth=0, highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT, background=SURFACE, foreground=INK, selectbackground=SOFT_ACCENT, selectforeground=ACCENT, selectborderwidth=0, activestyle="none")
         scrollbar = ttk.Scrollbar(listing, orient="vertical", command=self.listbox.yview)
         self.listbox.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
@@ -36,7 +38,7 @@ class TopicsDialog(tk.Toplevel):
         actions.pack(fill="x", pady=(10, 12))
         ttk.Button(actions, text="Añadir", command=self.add).pack(side="left")
         ttk.Button(actions, text="Renombrar", command=self.rename).pack(side="left", padx=(6, 0))
-        ttk.Button(actions, text="Eliminar", command=self.remove).pack(side="left", padx=(6, 0))
+        ttk.Button(actions, text="Eliminar", style="Danger.TButton", command=self.remove).pack(side="left", padx=(6, 0))
         ttk.Label(content, text="Al eliminar, reasignar las fuentes a:", style="Muted.TLabel").pack(anchor="w", pady=(0, 5))
         self.replacement = tk.StringVar(self)
         self.replacement_box = ttk.Combobox(content, textvariable=self.replacement, state="readonly")
@@ -46,7 +48,9 @@ class TopicsDialog(tk.Toplevel):
         ttk.Button(footer, text="Cancelar", command=self.close).pack(side="left")
         ttk.Button(footer, text="Guardar temas", command=self.save, style="Primary.TButton").pack(side="right")
         self.protocol("WM_DELETE_WINDOW", self.close)
+        self.bind("<Escape>", lambda _event: self.close())
         self.refresh(0)
+        center_dialog(self, parent)
         self.grab_set()
 
     def selected_topic(self):

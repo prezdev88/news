@@ -149,7 +149,7 @@ class CustomSourceReadingTests(unittest.TestCase):
         reader = lambda settings, progress: collect_news(settings, progress, session, NOW)
         with tempfile.TemporaryDirectory() as directory:
             settings = Settings(sources=(active, disabled), article_count=3, output_dir=directory)
-            with patch("manana.pipeline.LMStudio", return_value=client), patch("manana.pipeline.collect_news", side_effect=reader):
+            with patch("manana.pipeline.create_model_client", return_value=client), patch("manana.pipeline.collect_news", side_effect=reader):
                 path = generate(settings, lambda _: None)
             self.assertTrue(path.read_bytes().startswith(b"%PDF-"))
             audit = json.loads(path.with_suffix(".json").read_text())
@@ -228,7 +228,7 @@ class CustomSourceReadingTests(unittest.TestCase):
         with self.assertRaisesRegex(AppError, "Activa al menos una fuente"):
             collect_news(settings, lambda _: None, session, NOW)
         self.assertFalse(session.calls)
-        with patch("manana.pipeline.LMStudio") as model, self.assertRaisesRegex(AppError, "Activa al menos una fuente"):
+        with patch("manana.pipeline.create_model_client") as model, self.assertRaisesRegex(AppError, "Activa al menos una fuente"):
             generate(settings, lambda _: None)
         model.assert_not_called()
 

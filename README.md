@@ -1,6 +1,92 @@
 # La Mañana
 
-Genera al ejecutarla un periódico de noticias nacionales de Chile en **un PDF de una sola página**, con resúmenes escritos por el modelo que tengas en **LM Studio**. Incluye una app de escritorio y un comando directo.
+Genera al ejecutarla un periódico de noticias nacionales de Chile en **un PDF de una sola página**. La versión alfa funciona **sin GUI**, con News y **Ollama en Docker**, y lee sus preferencias de `config.json` en cada ejecución. La interfaz de escritorio anterior sigue disponible como alternativa local.
+
+## Alfa: generar en el Dell con Docker
+
+Requiere Docker Engine y Docker Compose funcionando y accesibles para tu usuario, además de internet para la primera instalación, descargar el modelo y consultar los medios. No requiere Python ni un escritorio instalados en el Dell: Python, Cairo y las fuentes tipográficas van dentro de la imagen de News.
+
+Desde la carpeta del proyecto, ejecuta:
+
+```bash
+./generar.sh
+```
+
+El script también se puede invocar mediante su ruta absoluta desde otra carpeta. Realiza lo siguiente:
+
+1. Inicia el contenedor de Ollama y espera a que responda.
+2. Construye la imagen de News, reutilizando las capas que ya existen.
+3. Lee `config.json` y comprueba el modelo. Si falta y `auto_pull_model` es `true`, lo descarga en Ollama. La primera descarga de Qwen3 4B ocupa unos 2,5 GB; las siguientes ejecuciones reutilizan el volumen `ollama_models`.
+4. Descarga las noticias, selecciona **7** de las últimas **24 horas** y genera **un PDF de una página Carta** en `output/`.
+5. El contenedor de News termina y devuelve un código de salida: `0` si terminó correctamente o un valor distinto si falló. Ollama permanece disponible y libera el modelo de RAM según `keep_alive`.
+
+La configuración inicial **no abre ventanas ni visores, no imprime, no guarda PNG ni JSON auxiliares y no instala cron**. Si no hay siete noticias válidas, o no se puede completar una edición fiel al formato, el programa informa el error y no publica una edición con menos noticias.
+
+## Configuración de la alfa
+
+Edita **`config.json`**. Los cambios se leen en la próxima ejecución, sin reconstruir la imagen por cambiar preferencias. `config.example.json` es una copia inicial de referencia; si falta el archivo principal, cópialo:
+
+```bash
+cp config.example.json config.json
+```
+
+Si conservas un `config.json` de la versión de escritorio, actualiza su proveedor, URL, modelo y opciones para Ollama usando el ejemplo como referencia y conservando tus fuentes y temas. La ejecución por consola exige `provider` explícito para evitar conectarse silenciosamente a LM Studio. En Compose la URL es `http://ollama:11434`; `localhost` dentro del contenedor de News apunta al propio contenedor.
+
+Los campos principales son:
+
+| Campo | Valor inicial / función |
+| --- | --- |
+| `provider` | `ollama`; conserva `lmstudio` para configuraciones anteriores |
+| `base_url` | `http://ollama:11434`, la dirección interna del servicio de Compose, sin `/api` ni `/v1` |
+| `model` | `qwen3:4b`; puedes cambiarlo, por ejemplo, a `qwen3:1.7b` |
+| `model_options` | Parámetros nativos de Ollama: contexto, hilos, GPU, temperatura, top-p, top-k, min-p, penalización de repetición y semilla; admite opciones adicionales de Ollama |
+| `think` | `false`: desactiva el razonamiento en los modelos que admiten ese control |
+| `keep_alive` | `10m`: tiempo que el modelo permanece en RAM después de una petición |
+| `auto_pull_model` | `true`: descarga el modelo configurado si todavía no existe |
+| `structured_output` | `true`: exige al modelo respuestas mediante el esquema JSON de cada operación |
+| `system_prompt` | Instrucciones editoriales para el modelo, editables |
+| `paper`, `article_count`, `lookback_hours` | `Carta`, `7`, `24` |
+| `candidates_per_source`, `technology_candidates_per_source` | Máximo de candidatos aceptados por fuente general y tecnológica: `8` y `4` |
+| `timeout_seconds` | `1800`: espera máxima por petición a Ollama, incluida la descarga inicial |
+| `connect_timeout_seconds`, `download_timeout_seconds` | Espera de conexión y de lectura de los medios: `5` y `25` segundos |
+| `max_download_bytes` | Máximo descargado por documento: `4000000` bytes |
+| `user_agent`, `accept_language` | Cabeceras usadas al consultar los medios |
+| `max_output_tokens`, `max_retry_output_tokens` | `1024` inicialmente y hasta `2048` en un reintento si se trunca el JSON. No dupliques estos límites en `model_options.num_predict` |
+| `max_article_chars` | `8000`: texto máximo de cada artículo enviado al modelo |
+| `output_dir` | `./output`; también puedes elegir una subcarpeta, como `./output/diario`, dentro del directorio montado |
+| `open_pdf_after_generation` | `false` |
+| `print_after_generation`, `printer` | Impresión desactivada. Se conserva el nombre de impresora; la conexión de CUPS desde Docker queda para una futura versión |
+| `save_preview`, `save_metadata` | `false`; puedes activar PNG y JSON auxiliares para revisar resultados |
+| `sources` | Fuentes completas: nombre, URL de portada, RSS, ruta de artículos, tema y filtros |
+| `topics` | Catálogo editable de temas |
+
+`model_options.num_ctx` comienza en `16384`, `num_thread` en `2` y `num_gpu` en `0`, para probar el i5 de dos núcleos del Dell por CPU. La memoria permite probar el modelo, pero el tiempo de una edición y la calidad de los resúmenes deben medirse allí con noticias reales. El programa nunca sustituye silenciosamente el modelo elegido.
+
+En cada fuente puedes modificar `name`, `page_url`, `article_prefix`, `feed_url`, `section`, `require_chile`, `enabled`, `require_date_in_url` y `allow_external_feed_articles`. Para una fuente nueva con URLs sin fecha, usa `require_date_in_url: false`; para un RSS que enlace a otros dominios, `allow_external_feed_articles: true`. `enabled: false` la conserva sin consultarla. Una sección vacía usa el tema Nacionales. Se mantienen los filtros de fecha y texto suficiente.
+
+Las rutas relativas de `output_dir` se resuelven desde la carpeta del archivo JSON. En Docker, la carpeta `output/` del proyecto está montada en `/app/output`. El JSON se monta para lectura y los modelos se guardan en un volumen independiente de la imagen de la aplicación. Ollama se comunica con News por la red de Compose y no publica un puerto en el Dell.
+
+Para comprobar la configuración o generar una maqueta, sin iniciar Ollama ni descargar modelos:
+
+```bash
+mkdir -p output
+docker compose build news
+docker compose run --rm --no-deps -T news --check-config
+docker compose run --rm --no-deps -T news --demo
+```
+
+La maqueta queda marcada como tal; no contiene noticias reales. Para consultar el servicio:
+
+```bash
+docker compose ps
+docker compose logs ollama
+```
+
+Para validar sin Docker, si ya tienes las dependencias Python locales, usa `./generar-local.sh --check-config`. Para desarrollo, `python3 -m unittest discover -s tests -v` comprueba también la API nativa de Ollama simulada y el flujo alfa de siete noticias a un único PDF Carta, sin visor ni impresión. No ejecuta un modelo real.
+
+## Interfaz de escritorio y LM Studio (alternativa local)
+
+Las secciones siguientes describen la interfaz anterior. Para usarla, configura `provider: "lmstudio"`, `base_url: "http://localhost:1234/v1"`, el identificador de tu modelo y activa `save_preview` para la vista previa. En `model_options`, usa los parámetros admitidos por LM Studio, por ejemplo `{"temperature": 1.0, "top_p": 0.95, "top_k": 64}`. Ejecuta `./abrir-app.sh`. Los comandos locales usan `./generar-local.sh`; `./generar.sh` está reservado para la alfa dockerizada.
 
 La edición reserva **al menos una noticia de Tecnología** cuando hay artículos recientes relacionados con Chile. Esa nota forma parte del total: si eliges siete, se incluyen siete en total, con tecnología entre ellas. Se buscan temas como inteligencia artificial, ciberseguridad, software, conectividad e innovación. Si no se encuentran artículos de tecnología en el período elegido, se indica en los avisos y se puede ampliar la ventana de noticias.
 
@@ -13,13 +99,15 @@ La edición reserva **al menos una noticia de Tecnología** cuando hay artículo
    ./abrir-app.sh
    ```
 
-3. Pulsa **Detectar**, elige tu modelo y haz clic en **Generar mi periódico**. El papel predeterminado es **Carta (Letter)**; también puedes elegir A4, el período de noticias y la carpeta de salida.
+3. En **Modelo local**, pulsa **Detectar** y elige tu modelo. En **Edición**, personaliza las opciones y haz clic en **Generar mi periódico**. El papel predeterminado es **Carta (Letter)**; también puedes elegir A4, el período de noticias y la carpeta de salida.
+
+La interfaz da prioridad al periódico, con un panel de configuración compacto, tarjetas claras y controles redondeados. La cabecera muestra la última comprobación de conexión con LM Studio y el panel **Actividad** informa del progreso. Las ventanas de fuentes, temas e impresión comparten el mismo estilo.
 
 En la vista previa, usa la **rueda del mouse** para acercar o alejar el periódico, centrando el zoom donde está el puntero. Mantén pulsado el botón izquierdo y **arrastra** para recorrer la hoja ampliada. Pulsa **Ajustar página** o haz **doble clic** para volver a ver la página completa.
 
 ## Elegir y añadir fuentes
 
-En **Tu edición**, pulsa **Fuentes**. El número del botón indica cuántas secciones están activas.
+En la pestaña **Edición**, pulsa **Fuentes**. El número del botón indica cuántas secciones están activas.
 
 1. Marca la columna **Usar** para activar o desactivar una fuente. También puedes seleccionar una fila y pulsar **Activar / desactivar** o la barra espaciadora.
 2. Pulsa **Añadir…**, escribe el nombre del medio, pega una **URL de sección o RSS/Atom** y elige un tema o escribe uno nuevo.
@@ -41,21 +129,21 @@ Las listas de fuentes, temas, modelos, impresoras y tamaños de papel se muestra
 
 ## Imprimir
 
-Pulsa **Imprimir PDF…**, selecciona la impresora y confirma con **Imprimir en negro**. Se envía **una copia, por una cara, en Carta (Letter) y blanco y negro** con los valores predeterminados. El diálogo permite cambiar a A4. La app recuerda la impresora elegida y recupera la última edición guardada al abrirse, por lo que puedes imprimirla sin volver a consultar noticias ni usar el modelo.
+Pulsa **Imprimir…**, selecciona la impresora y confirma con **Imprimir en negro**. Se envía **una copia, por una cara, en Carta (Letter) y blanco y negro** con los valores predeterminados. El diálogo permite cambiar a A4. La app recuerda la impresora elegida y recupera la última edición guardada al abrirse, por lo que puedes imprimirla sin volver a consultar noticias ni usar el modelo.
 
 La impresión utiliza CUPS y sus herramientas `lp`, `lpstat` y `lpoptions`. La app solicita el modo monocromo y, cuando el controlador anuncia una opción de escala de grises, también la aplica. Cada trabajo incluye una sola página, sin portada adicional, y se ajusta al área imprimible. La confirmación muestra que el trabajo se envió a la cola de CUPS y su identificador; el estado físico depende de la impresora.
 
 Para imprimir desde la terminal:
 
 ```bash
-./generar.sh --printers
-./generar.sh --print-file output/tu-edicion.pdf --printer NOMBRE_IMPRESORA
+./generar-local.sh --printers
+./generar-local.sh --print-file output/tu-edicion.pdf --printer NOMBRE_IMPRESORA
 ```
 
 Para generar e imprimir una edición en la misma ejecución:
 
 ```bash
-./generar.sh --print --no-open
+./generar-local.sh --print --no-open
 ```
 
 La impresión ocurre al pulsar el botón correspondiente o al indicar `--print` / `--print-file`. El PDF usa texto negro y grises neutros.
@@ -63,21 +151,21 @@ La impresión ocurre al pulsar el botón correspondiente o al indicar `--print` 
 Para generar directamente desde la terminal y abrir el PDF:
 
 ```bash
-./generar.sh
+./generar-local.sh --open
 ```
 
 Se usa automáticamente el único modelo Gemma disponible, o el único modelo de texto si no hay Gemma. Si hay varios, elige uno en la app o indica su identificador:
 
 ```bash
-./generar.sh --models
-./generar.sh --model 'identificador-que-muestra-lm-studio'
+./generar-local.sh --models
+./generar-local.sh --model 'identificador-que-muestra-lm-studio'
 ```
 
 La interfaz guarda las preferencias en `config.json`. También puedes copiar `config.example.json` a `config.json` y editarlo. Los argumentos del comando tienen prioridad para esa ejecución:
 
 ```bash
-./generar.sh --paper Carta --count 5 --hours 48 --no-open
-./generar.sh --base-url http://localhost:1234/v1 --output-dir ./output
+./generar-local.sh --paper Carta --count 5 --hours 48 --no-open
+./generar-local.sh --base-url http://localhost:1234/v1 --output-dir ./output
 ```
 
 ## Requisitos
@@ -127,7 +215,7 @@ Se generan PDFs bajo demanda. La app no instala tareas programadas.
 ## Ver el diseño sin conectar LM Studio
 
 ```bash
-./generar.sh --demo
+./generar-local.sh --demo
 ```
 
 Genera `output/ejemplo.pdf`, claramente marcado como **maqueta** y con textos explicativos en lugar de noticias reales.
@@ -140,7 +228,7 @@ python3 -m unittest discover -s tests -v
 
 Las pruebas cubren filtros de país y fecha, extracción de artículos, errores de la API local, respuestas JSON inválidas, cifras añadidas y el flujo completo de generación con fuentes y respuestas de modelo simuladas. Se verifican las opciones de impresión Carta, blanco y negro, una copia y ausencia de portadas con CUPS simulado; las pruebas no envían trabajos reales. También se comprueba el PDF con `pdfinfo` y `qpdf` cuando están disponibles. Las pruebas no requieren LM Studio ni acceso a internet.
 
-La vista previa se prueba con imágenes reales y un lienzo simulado: zoom bajo el puntero, límites de desplazamiento, vuelta a página completa, colores y agrupación de eventos antes de dibujar. La interacción usa cuadros rápidos y afina la imagen tras 150 ms sin movimiento. Estas pruebas no necesitan abrir una ventana.
+La vista previa se prueba con imágenes reales y un lienzo simulado: zoom bajo el puntero, límites de desplazamiento, vuelta a página completa, colores y agrupación de eventos antes de dibujar. El visor reutiliza la imagen de Tk durante el zoom y el arrastre, limita su tamaño al área visible y omite cuadros que no han cambiado. La interacción usa cuadros rápidos y afina la imagen tras 150 ms sin movimiento. También se comprueba que cargar otra edición sustituya los píxeles anteriores. Estas pruebas no necesitan abrir una ventana; la latencia final de pantalla requiere comprobarse en una sesión gráfica.
 
 También se comprueba la compatibilidad con configuraciones anteriores, la persistencia de las fuentes elegidas, las fuentes desactivadas, los RSS/Atom externos, los artículos sin fecha en la URL y la conservación de los filtros de Chile, tecnología y actualidad al usar medios nuevos.
 

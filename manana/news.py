@@ -18,7 +18,6 @@ from bs4 import BeautifulSoup
 from .config import AppError, Settings, Source
 
 CHILE = ZoneInfo("America/Santiago")
-USER_AGENT = "LaManana/1.0 (personal news reader; public articles only)"
 ARTICLE_DATE = re.compile(r"/(\d{4})[-/](\d{2})[-/](\d{2})(?:/|$)")
 MONTHS = {name: index for index, name in enumerate(
     ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"), 1
@@ -109,15 +108,17 @@ def is_national_article(url: str, source: Source, *, from_feed: bool = False) ->
     )
 
 
-def _download(session: requests.Session, url: str) -> bytes:
-    with session.get(url, timeout=(10, 25), stream=True) as response:
+def _download(session: requests.Session, url: str, settings: Settings | None = None) -> bytes:
+    timeout = (settings.connect_timeout_seconds, settings.download_timeout_seconds) if settings else (10, 25)
+    max_bytes = settings.max_download_bytes if settings else 4_000_000
+    with session.get(url, timeout=timeout, stream=True) as response:
         response.raise_for_status()
         chunks = []
         size = 0
         for chunk in response.iter_content(65536):
             size += len(chunk)
-            if size > 4_000_000:
-                raise AppError("El artículo supera el límite de descarga (4 MB).")
+            if size > max_bytes:
+                raise AppError(f"El artículo supera el límite de descarga ({max_bytes} bytes).")
             chunks.append(chunk)
         # Keep the original bytes: RSS and HTML parsers understand XML/meta
         # charset declarations, including the Latin-1 still used by some feeds.
@@ -241,7 +242,7 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
         raise AppError("Activa al menos una fuente en «Fuentes de noticias».")
     now = now or datetime.now(CHILE)
     session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "es-CL,es;q=0.9"})
+    session.headers.update({"User-Agent": settings.user_agent, "Accept-Language": settings.accept_language})
     articles = []
     warnings = []
     seen_urls = set()
@@ -251,12 +252,12 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
         candidates = []
         if source.feed_url:
             try:
-                candidates = parse_feed(_download(session, source.feed_url), source)
+                candidates = parse_feed(_download(session, source.feed_url, settings), source)
             except (requests.RequestException, AppError, LookupError) as exc:
                 warnings.append(f"{source.name}: RSS no disponible ({type(exc).__name__}); se intenta la portada nacional.")
         if not candidates:
             try:
-                content = _download(session, source.page_url)
+                content = _download(session, source.page_url, settings)
                 candidates = parse_feed(content, source) or parse_listing(content, source)
             except (requests.RequestException, AppError, LookupError) as exc:
                 warnings.append(f"{source.name}: no se pudo leer la portada ({type(exc).__name__}).")
@@ -270,7 +271,7 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
             if candidate.published and not is_recent(candidate, now, settings.lookback_hours):
                 continue
             try:
-                article = extract_article(_download(session, candidate.url), candidate)
+                article = extract_article(_download(session, candidate.url, settings), candidate)
             except (requests.RequestException, AppError, LookupError):
                 failures += 1
                 continue
@@ -287,7 +288,7 @@ def collect_news(settings: Settings, progress=print, session=None, now=None) -> 
             articles.append(article)
             accepted += 1
             progress(f"  {source.name}: {accepted} noticias disponibles")
-            if accepted >= (min(4, settings.candidates_per_source) if source.section == "Tecnología" else settings.candidates_per_source):
+            if accepted >= (min(settings.technology_candidates_per_source, settings.candidates_per_source) if source.section == "Tecnología" else settings.candidates_per_source):
                 break
         if failures:
             warnings.append(f"{source.name}: {failures} notas descartadas por acceso, fecha o texto insuficiente.")
