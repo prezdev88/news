@@ -28,6 +28,8 @@ Mientras el PDF esté pendiente, cada resumen validado se guarda inmediatamente 
 
 **Cuando el PDF se genera correctamente, se elimina el archivo de resúmenes temporales completo.** La siguiente edición empieza con resúmenes nuevos. Si la maquetación falla, se conserva el avance. La escritura del avance es atómica y queda en la carpeta montada del Dell; el archivo `.lock` que permanece vacío evita que dos ejecuciones modifiquen el mismo avance simultáneamente. Si el borrado falla por permisos u otro error del disco, se informa por consola.
 
+La maquetación mide el texto con las mismas métricas tipográficas en la comprobación previa y en el PDF. Si el diseño con noticia principal a todo el ancho no cabe, prueba columnas de alturas independientes y, si hace falta, una cabecera más baja. Conserva el texto completo, el orden de lectura por columnas, los márgenes de impresión y un cuerpo mínimo de 9,8 puntos. Este ajuste de distribución no consulta al modelo: puede generar el PDF directamente con los resúmenes recuperados. Si aun así el contenido excede la página, conserva el avance e informa el error.
+
 ## Configuración de la alfa
 
 Edita **`config.json`**. Los cambios se leen en la próxima ejecución, sin reconstruir la imagen por cambiar preferencias. `config.example.json` es una copia inicial de referencia; si falta el archivo principal, cópialo:
