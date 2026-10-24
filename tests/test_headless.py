@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 import io
 import json
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,7 +17,7 @@ from manana.config import AppError, ROOT, Settings, load_settings, save_settings
 from manana.ollama import Ollama
 from manana.newspaper import LayoutOverflowError
 from manana.pipeline import generate
-from test_app import FakeModelSession, FakeResponse, SUMMARY, fixture_articles
+from test_app import BODY, FakeModelSession, FakeResponse, SUMMARY, fixture_articles
 
 
 def native_response(content, reason="stop"):
@@ -108,6 +110,40 @@ class HeadlessGenerationTests(unittest.TestCase):
             self.assertEqual(len([call for call in session.calls if call[0] == "POST"]), 8)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
+    def test_43_word_second_story_is_shortened_and_the_seven_story_pdf_finishes(self):
+        class LongSecondSummary(FakeOllamaSession):
+            summaries = 0
+
+            def request(self, method, url, **kwargs):
+                prompt = kwargs.get("json", {}).get("messages", [{}])[-1].get("content", "")
+                if prompt.startswith("Acorta únicamente"):
+                    self.calls.append((method, url, copy.deepcopy(kwargs)))
+                    return native_response({"summary": " ".join(BODY.split()[:30]) + "."})
+                response = super().request(method, url, **kwargs)
+                if prompt.startswith("Redacta una noticia"):
+                    self.summaries += 1
+                    if self.summaries == 2:
+                        draft = json.loads(response.payload["message"]["content"])
+                        draft["summary"] = " ".join(BODY.split()[:43]) + "."
+                        return native_response(draft)
+                return response
+
+        with tempfile.TemporaryDirectory() as directory:
+            settings = load_settings(ROOT / "config.example.json")
+            settings.output_dir = directory
+            session = LongSecondSummary()
+            client = lambda current, **kwargs: Ollama(current, session=session, **kwargs)
+            messages = []
+            with patch("manana.pipeline.create_model_client", side_effect=client), \
+                    patch("manana.pipeline.collect_news", return_value=(fixture_articles(), [])):
+                pdf = generate(settings, messages.append)
+            self.assertTrue(pdf.read_bytes().startswith(b"%PDF-"))
+            self.assertEqual(list(Path(directory).iterdir()), [pdf])
+            self.assertEqual(session.summaries, 7)
+            self.assertEqual(len([call for call in session.calls if call[0] == "POST"]), 9)
+            self.assertTrue(any("43 palabras" in message for message in messages))
+            self.assertIn("7 de 7 noticias", messages[-1])
+
     def test_check_config_needs_neither_display_nor_model_server(self):
         with patch("sys.argv", ["manana", "--config", str(ROOT / "config.example.json"), "--check-config"]), \
                 patch("manana.__main__.generate") as generate, \
@@ -128,6 +164,7 @@ class HeadlessGenerationTests(unittest.TestCase):
             {"think": 0},
             {"print_after_generation": "false"},
             {"download_timeout_seconds": 0},
+            {"summary_lengths": {}},
         ):
             with self.subTest(change=change), self.assertRaises(AppError):
                 values = dict(provider="ollama", base_url="http://ollama:11434", model="qwen3:4b")
@@ -203,9 +240,9 @@ class OllamaTests(unittest.TestCase):
         result = client.summarize(article, "Regiones", True)
         self.assertEqual(result["headline"], valid["headline"])
         payload = session.calls[0][2]["json"]
-        self.assertEqual(payload["format"]["properties"]["headline"]["maxLength"], 90)
+        self.assertEqual(payload["format"]["properties"]["headline"]["maxLength"], 75)
         self.assertEqual(payload["format"]["properties"]["headline"]["minLength"], 12)
-        self.assertIn('"maxLength": 90', payload["messages"][-1]["content"])
+        self.assertIn('"maxLength": 75', payload["messages"][-1]["content"])
         self.assertIn("FIN DEL ARTÍCULO.", payload["messages"][-1]["content"])
 
         invalid = valid | {"headline": "Un titular que supera el margen. " * 4}
@@ -214,6 +251,82 @@ class OllamaTests(unittest.TestCase):
             Ollama(self.settings(), session=session).summarize(article, "Regiones", True)
         correction = session.calls[1][2]["json"]["messages"][-1]["content"]
         self.assertLess(correction.index("FIN DEL ARTÍCULO."), correction.index("CORRECCIÓN NECESARIA"))
+
+    def test_compact_word_limit_is_in_the_first_native_request(self):
+        article = fixture_articles(1)[0]
+        draft = {"headline": "Comunidades participan en una consulta regional", "summary": " ".join(SUMMARY.split()[:30]) + "."}
+        session = FakeModelSession([native_response(draft)])
+        Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
+        schema = session.calls[0][2]["json"]["format"]
+        pattern = schema["properties"]["summary"]["pattern"]
+        for count in (25, 30, 35):
+            with self.subTest(count=count):
+                self.assertIsNotNone(re.fullmatch(pattern, " ".join(["información"] * count) + "."))
+        for count in (20, 24, 36, 40, 43):
+            with self.subTest(count=count):
+                self.assertIsNone(re.fullmatch(pattern, " ".join(["información"] * count) + "."))
+        self.assertEqual(schema["properties"]["headline"]["maxLength"], 65)
+        prompt = session.calls[0][2]["json"]["messages"][-1]["content"]
+        self.assertIn("entre 25 y 35 palabras", prompt)
+        self.assertIn('"pattern"', prompt)
+
+    def test_word_boundaries_keep_accents_and_quotes_without_hidden_extra_words(self):
+        article = fixture_articles(1)[0]
+        draft = {"headline": "Comunidades participan en una consulta regional", "summary": SUMMARY}
+        session = FakeModelSession([native_response(draft)])
+        Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
+        pattern = session.calls[0][2]["json"]["format"]["properties"]["summary"]["pattern"]
+        words = ["Según", "Núñez,", "«la", "propuesta»"] + ["información"] * 21
+        self.assertIsNotNone(re.fullmatch(pattern, " ".join(words) + "."))
+        for separator in ("\n", "\t", "\u00a0", "\u2003", "\u202f", "\u3000"):
+            with self.subTest(separator=repr(separator)):
+                self.assertIsNone(re.fullmatch(pattern, separator.join(words) + "."))
+        self.assertIsNone(re.fullmatch(pattern, " ".join(words)))
+
+    def test_43_word_summary_is_rewritten_alone_and_keeps_the_valid_headline(self):
+        original = fixture_articles(1)[0]
+        article = replace(original, body=original.body + " ANTECEDENTE_EXCLUSIVO_DEL_ARTICULO.")
+        headline = "Justicia revisa la tramitación de rebajas de condena"
+        long_summary = " ".join(["antecedentes"] * 43) + "."
+        short_summary = " ".join(["antecedentes"] * 30) + "."
+        session = FakeModelSession([
+            native_response({"headline": headline, "summary": long_summary}),
+            native_response({"summary": short_summary}),
+        ])
+        result = Ollama(self.settings(), session=session).summarize(article, "Política", False, compact=True)
+        self.assertEqual(result["headline"], headline)
+        self.assertEqual(result["summary"], short_summary)
+        self.assertEqual(len(session.calls), 2)
+        payload = session.calls[1][2]["json"]
+        self.assertEqual(set(payload["format"]["properties"]), {"summary"})
+        correction = payload["messages"][-1]["content"]
+        self.assertIn("43 palabras", correction)
+        self.assertIn(long_summary, correction)
+        self.assertNotIn("ANTECEDENTE_EXCLUSIVO_DEL_ARTICULO", correction)
+
+    def test_shortening_keeps_the_original_numeric_claim_guard(self):
+        article = fixture_articles(1)[0]
+        long_summary = " ".join(["antecedentes"] * 43) + "."
+        invalid = "La autoridad confirmó 987 casos " + " ".join(["antecedentes"] * 25) + "."
+        session = FakeModelSession([
+            native_response({"headline": "Comunidades participan en una consulta regional", "summary": long_summary}),
+            native_response({"summary": invalid}),
+        ])
+        with self.assertRaisesRegex(AppError, "987"):
+            Ollama(self.settings(), session=session).summarize(article, "Regiones", False, compact=True)
+
+    def test_custom_lengths_control_the_prompt_and_the_schema(self):
+        lengths = self.settings().summary_lengths
+        lengths["compact"] = {"lead_words": [40, 50], "body_words": [20, 28], "headline_chars": 55}
+        draft = {"headline": "Comunidades participan en una consulta regional", "summary": " ".join(["antecedentes"] * 24) + "."}
+        session = FakeModelSession([native_response(draft)])
+        Ollama(self.settings(summary_lengths=lengths), session=session).summarize(fixture_articles(1)[0], "Regiones", False, compact=True)
+        payload = session.calls[0][2]["json"]
+        self.assertIn("entre 20 y 28 palabras", payload["messages"][-1]["content"])
+        self.assertEqual(payload["format"]["properties"]["headline"]["maxLength"], 55)
+        pattern = payload["format"]["properties"]["summary"]["pattern"]
+        self.assertIsNotNone(re.fullmatch(pattern, " ".join(["texto"] * 28) + "."))
+        self.assertIsNone(re.fullmatch(pattern, " ".join(["texto"] * 29) + "."))
 
 
 if __name__ == "__main__":

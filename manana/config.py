@@ -162,6 +162,11 @@ class Settings:
     max_retry_output_tokens: int = 8192
     max_article_chars: int = 8000
     compact_summaries: bool = False
+    summary_lengths: dict = field(default_factory=lambda: {
+        "compact": {"lead_words": [45, 60], "body_words": [25, 35], "headline_chars": 65},
+        "standard": {"lead_words": [60, 75], "body_words": [35, 45], "headline_chars": 75},
+        "expanded": {"lead_words": [75, 100], "body_words": [40, 65], "headline_chars": 95},
+    })
     open_pdf_after_generation: bool = False
     print_after_generation: bool = False
     save_preview: bool = True
@@ -227,6 +232,17 @@ class Settings:
         for name in ("auto_pull_model", "structured_output", "compact_summaries", "open_pdf_after_generation", "print_after_generation", "save_preview", "save_metadata"):
             if type(getattr(self, name)) is not bool:
                 raise AppError(f"{name} debe ser true o false.")
+        if not isinstance(self.summary_lengths, dict) or set(self.summary_lengths) != {"compact", "standard", "expanded"}:
+            raise AppError("summary_lengths debe definir compact, standard y expanded.")
+        for profile, limits in self.summary_lengths.items():
+            if not isinstance(limits, dict) or set(limits) != {"lead_words", "body_words", "headline_chars"}:
+                raise AppError(f"summary_lengths.{profile} debe definir lead_words, body_words y headline_chars.")
+            for name in ("lead_words", "body_words"):
+                bounds = limits[name]
+                if not isinstance(bounds, (list, tuple)) or len(bounds) != 2 or any(type(value) is not int for value in bounds) or not 1 <= bounds[0] <= bounds[1] <= 200:
+                    raise AppError(f"summary_lengths.{profile}.{name} debe ser [mínimo, máximo], entre 1 y 200 palabras.")
+            if type(limits["headline_chars"]) is not int or not 12 <= limits["headline_chars"] <= 150:
+                raise AppError(f"summary_lengths.{profile}.headline_chars debe estar entre 12 y 150.")
         for name in ("system_prompt", "user_agent", "accept_language", "output_dir"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
                 raise AppError(f"{name} debe contener texto.")

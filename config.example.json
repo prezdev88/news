@@ -111,5 +111,40 @@
     "Sociedad",
     "Tecnología"
   ],
-  "compact_summaries": true
+  "compact_summaries": true,
+  "summary_lengths": {
+    "compact": {
+      "lead_words": [
+        45,
+        60
+      ],
+      "body_words": [
+        25,
+        35
+      ],
+      "headline_chars": 65
+    },
+    "standard": {
+      "lead_words": [
+        60,
+        75
+      ],
+      "body_words": [
+        35,
+        45
+      ],
+      "headline_chars": 75
+    },
+    "expanded": {
+      "lead_words": [
+        75,
+        100
+      ],
+      "body_words": [
+        40,
+        65
+      ],
+      "headline_chars": 95
+    }
+  }
 }
